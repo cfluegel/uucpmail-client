@@ -1,129 +1,114 @@
 # uucpmail-client
 
-Nativer Multiplattform-Mail-Client (macOS, Windows, Linux) für den Dienst
-[uucpmail.de](https://uucpmail.de) – UUCP-over-SSH, eine einzelne Binärdatei,
-keine weitere Software nötig (kein uucico, kein OpenSSH-Client).
+*English version – [deutsche Fassung](README.de.md)*
 
-- **Winlink-artiges Layout:** Ordner (Posteingang/Postausgang/Gesendet) links,
-  Nachrichtenliste oben rechts, Inhalt darunter.
-- **Markdown als Formatierung:** V1 ohne Renderer – die Toolbar im
-  Compose-Fenster fügt die Syntax (`#`, `**…**`, Listen, …) als Text ein.
-- **Eigene Taylor-UUCP-Implementierung** (Handshake + Protokoll `t`) über
-  `golang.org/x/crypto/ssh`; Details in [docs/PROTOCOL.md](docs/PROTOCOL.md).
-- **Ein Account, mehrere Identitäten** (Absenderadressen); SSH-Key-Verwaltung
-  mit Erststart-Einrichtung.
-- **Mail-Funktionen (V1.1):** CC/BCC (BCC nur im Envelope), Antworten/Allen
-  antworten/Weiterleiten mit klassischem `> `-Zitat und Threading-Headern,
-  Anhänge senden und empfangen (multipart/mixed), MIME-Empfang mit
-  text/plain-Präferenz und sicherem, rudimentärem HTML-Rendering (eigener
-  Sanitizer auf RichText-Basis – kein CSS/JS/Webview/Remote-Inhalte),
-  Shortcuts N/R/Shift+R/F/Entf/Cmd+S.
+A native multi-platform mail client (macOS, Windows, Linux) for
+[uucpmail.de](https://uucpmail.de) – a UUCP-over-SSH mail service. Ships as a
+single static binary with no runtime dependencies (no uucico, no OpenSSH
+client, no GnuPG installation required).
+
+- **Winlink-style layout:** folder tabs (Inbox / Drafts / Outbox / Sent),
+  message list on top, message content below.
+- **Markdown as formatting:** no renderer in V1 – the compose toolbar inserts
+  Markdown syntax (`#`, `**…**`, lists, …) as plain text.
+- **Own Taylor UUCP implementation** (handshake + protocol `t`) over
+  `golang.org/x/crypto/ssh` – verified against the Taylor UUCP 1.07 sources
+  and against a live server; details in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+- **One account, multiple identities** (sender addresses); SSH key management
+  with first-run setup and TOFU host key pinning (host key changes require
+  explicit confirmation).
+- **Mail features:** CC/BCC (BCC envelope-only), reply / reply-all / forward
+  with classic `> ` quoting and proper threading headers, attachments in both
+  directions (multipart/mixed), MIME receiving with text/plain preference and
+  a safe, rudimentary built-in HTML renderer (own sanitizer on top of Fyne
+  RichText – no CSS, no JS, no webview, no remote content), keyboard
+  shortcuts N / R / Shift+R / F / Del / Cmd+S.
+
+## OpenPGP
+
+OpenPGP is built in natively (pure Go via ProtonMail/go-crypto – no GnuPG
+required, identical on all platforms):
+
+- **Keys**: Settings → PGP. Generate a key pair interactively
+  (Ed25519/X25519, v4 – compatible with GnuPG ≥ 2.1, multiple identities
+  (UIDs) per key, configurable validity, default 2 years), import an existing
+  private key, export your public key, import/delete other people's public
+  keys. Stored as armored `pubring.asc`/`secring.asc` files (0600).
+- **Sending**: "Sign" and "Encrypt" toggle buttons in the compose window
+  (separately or combined). Format: PGP/MIME (RFC 3156) with text-mode
+  signatures (gateway-safe); signed+encrypted as combined one-pass message.
+  Encrypting requires public keys for ALL recipients; your own copy is always
+  encrypted to yourself (Sent stays readable). CLI: `send -sign -encrypt`,
+  `pgp-keygen`.
+- **Receiving**: multipart/encrypted, multipart/signed, inline PGP and
+  clearsign. Opening an encrypted mail asks (yes/no), then for the
+  passphrase; the unlocked key stays in memory for a configurable time
+  (default 15 min) – further encrypted mails open without prompting.
+  Decrypted content is never written to disk. Signature status in the view:
+  ✓ valid / ✗ invalid / ? key unknown. No trust/WoT model in V1 – keys are
+  verified manually via fingerprint.
+
+Interoperability is verified end-to-end against GnuPG 2.5 in both directions.
+
+## Address book
+
+A minimal address book (toolbar button): first name, last name, e-mail and
+optionally a GnuPG public key per contact. In the compose window the address
+book button (next to the From dropdown) opens an Outlook-style picker – select
+a row and add it via To/CC/BCC (multi-add, automatic separators, duplicate
+protection). Pasted public keys go into the central keyring; a contact with a
+key encrypts automatically.
+
+## Encrypted identity backup
+
+Settings → Backup creates an encrypted backup of the client identity
+(settings, SSH key, server host key, PGP keyring, contacts – NOT the mail
+store) as a passphrase-protected file (`gpg -c` compatible). Importing on
+another client deliberately overwrites the local identity after explicit
+warnings.
 
 ## Build
 
 ```sh
-make build        # → bin/uucpmail-client (benötigt Go + C-Toolchain, Fyne/CGO)
-make test         # Unit- und fakeserver-Tests (ohne Docker, ohne Netz)
+make build        # → bin/uucpmail-client (requires Go + a C toolchain, Fyne/CGO)
+make test         # unit and fake-server tests (no Docker, no network)
 ```
 
-Cross-Builds: GitHub-Actions-Matrix (`.github/workflows/build.yml`) oder
-lokal `make cross` (fyne-cross, Docker; macOS nur nativ/CI).
-
-## Benutzung
+Or directly from the module proxy:
 
 ```sh
-uucpmail-client            # GUI (Erststart: Schlüssel erzeugen, Pubkey an
-                           # beta@uucpmail.de senden, Node/Adresse eintragen)
-uucpmail-client keygen     # SSH-Schlüssel erzeugen, Pubkey anzeigen
-uucpmail-client send -subject "Hi" ziel@example.com < text.md
-uucpmail-client sync       # UUCP-Session: senden + abholen (wie Winlink)
-uucpmail-client queue      # wartende Jobs anzeigen
+go install github.com/cfluegel/uucpmail-client/cmd/uucpmail-client@latest
 ```
 
-Konfiguration/Daten liegen unter dem OS-Konfigurationsverzeichnis
+Cross builds: GitHub Actions matrix (`.github/workflows/build.yml`) or
+locally via `make cross` (fyne-cross, Docker; macOS builds natively/CI only).
+
+## Usage
+
+```sh
+uucpmail-client            # GUI (first run: generate key, register the
+                           # public key with the operator, enter node/address)
+uucpmail-client keygen     # generate the SSH key, print the public key
+uucpmail-client pgp-keygen # generate a PGP key pair
+uucpmail-client send -subject "Hi" someone@example.com < text.md
+uucpmail-client sync       # UUCP session: send + fetch (Winlink style)
+uucpmail-client queue      # show pending jobs
+```
+
+Configuration and data live in the OS config directory
 (`~/Library/Application Support/uucpmail`, `%AppData%\uucpmail`,
-`~/.config/uucpmail`): `config.json`, Schlüssel, `known_hosts` (TOFU),
-Mail-Store (`mail/`, eine `.eml` pro Nachricht + bbolt-Index) und
-UUCP-Spool (`spool/`).
+`~/.config/uucpmail`): `config.json`, keys, `known_hosts` (TOFU), the mail
+store (one `.eml` per message + a rebuildable index) and the UUCP spool.
 
-## Tests gegen den Server-Dev-Stack
+## Limits of store-and-forward
 
-`test/it/run-it.sh` startet den Docker-Dev-Stack aus `../server/` (read-only;
-das ssh-gateway ist dort offiziell auf `127.0.0.1:2222` published), legt einen
-Testnode per `uucpadm` an und fährt Send/Sync end-to-end.
-Alternativ ist `../server/client-sandbox/` die Taylor-Referenzimplementierung
-zum Vergleich.
+UUCP is asynchronous: "Sent" means **handed over to the server**, not
+delivered. Content checks (sender authorization, recipients, spam) happen
+server-side after the transfer; rejected mail triggers a DSN to the node's
+main address on a later poll. Transfer errors during the UUCP session are
+visible immediately (the mail stays in the Outbox with an error marker).
 
-## OpenPGP
+## License
 
-Der Client bringt OpenPGP nativ mit (reines Go via ProtonMail/go-crypto –
-keine GnuPG-Installation nötig, identisch auf allen Plattformen):
-
-- **Schlüssel**: Einstellungen → PGP. Eigenes Schlüsselpaar interaktiv
-  erzeugen (Ed25519/X25519, v4 – kompatibel mit GnuPG ≥ 2.1), vorhandenen
-  privaten Schlüssel importieren, eigenen Public Key exportieren (Copy/
-  Datei), fremde Public Keys importieren/löschen. Ablage als Armor-Dateien
-  `pubring.asc`/`secring.asc` im Konfigurationsverzeichnis (0600).
-- **Senden**: Toggle-Buttons „Signieren" und „Verschlüsseln" im Compose-
-  Fenster (einzeln oder kombiniert). Format: PGP/MIME (RFC 3156);
-  signiert+verschlüsselt als kombinierte One-Pass-Message. Verschlüsseln
-  braucht Public Keys ALLER Empfänger; die eigene Kopie wird immer
-  mitverschlüsselt (Gesendet bleibt lesbar). CLI: `send -sign -encrypt
-  [-pgp-pass …]`, `pgp-keygen -name -email [-pass]`.
-- **Empfangen**: multipart/encrypted, multipart/signed, Inline-PGP und
-  Clearsign. Beim Öffnen verschlüsselter Mails fragt der Client (Ja/Nein),
-  dann Passphrase; der entsperrte Schlüssel bleibt für die konfigurierte
-  Dauer (Default 15 min) im Speicher – weitere verschlüsselte Mails öffnen
-  sich solange ohne Nachfrage. Entschlüsseltes wird nie auf die Platte
-  geschrieben. Signaturstatus in der Ansicht: ✓ gültig / ✗ ungültig /
-  ? Schlüssel unbekannt. Kein Trust-/WoT-Modell in V1 – Schlüssel werden
-  manuell per Fingerprint verifiziert.
-
-Interop ist end-to-end gegen GnuPG 2.5 verifiziert: vom Client signierte+
-verschlüsselte Mails entschlüsselt `gpg` mit „Korrekte Signatur"; von
-GnuPG erzeugte Nachrichten (inkl. Inline-PGP) entschlüsselt und prüft der
-Client. Nachstellen: eigenen Public Key exportieren → `gpg --import`;
-Gegenrichtung `gpg -se -r <adresse> --armor` und die Ausgabe als Mailtext
-senden.
-
-## Adressbuch
-
-Minimales Adressbuch (Einstellungen → Kontakte): Vorname, Nachname,
-E-Mail und optional ein GnuPG Public Key. Im Compose-Fenster öffnet der
-Adressbuch-Button (neben dem Von-Dropdown) die Auswahl im Outlook-Stil –
-Zeile wählen und per An/CC/BCC einfügen (Mehrfachauswahl, automatische
-Trenner, Duplikat-Schutz).
-
-Schlüssel-Handhabung: Beim Anlegen/Bearbeiten eingefügte Public Keys
-landen im zentralen Schlüsselbund (pubring.asc); der Kontakt speichert
-nur eine Fingerprint-Referenz. Die Verschlüsselung findet Empfänger-
-Schlüssel weiterhin über die E-Mail-Adresse – ein Kontakt mit Key
-verschlüsselt also automatisch. V1-Verhalten: Beim Löschen eines
-Kontakts oder Ersetzen seines Schlüssels bleibt der (alte) Key im
-Schlüsselbund und ist im PGP-Tab löschbar. Hinweis: Das Key-Matching
-nutzt die UID des Schlüssels – weicht dessen E-Mail von der Kontakt-
-Adresse ab, greift die automatische Verschlüsselung nicht.
-
-## Grenzen des Store-and-Forward
-
-UUCP ist asynchron: „Gesendet" bedeutet **an den Server übergeben**, nicht
-zugestellt. Die inhaltliche Prüfung (Absender-Autorisierung, Empfänger,
-Spam) passiert serverseitig erst nach der Übertragung. Stand heute gilt:
-
-- Nicht registrierte Absenderadressen lehnt der Server mit 553 ab; der
-  Absender-Node erhält dazu beim nächsten Sync einen Ablehnungs-DSN
-  („Outgoing mail rejected: sender not authorized") an seine Hauptadresse
-  (seit Server-Commit 36dc306, live verifiziert). Trotzdem gilt: nur
-  registrierte Identitäten verwenden (Hinweis im Tab „Identitäten").
-- Scheitert die Weiterleitung nach Annahme dauerhaft, kommt ein DSN von
-  MAILER-DAEMON@uucpmail.de beim nächsten Sync als normale Mail an.
-- Übertragungsfehler während der UUCP-Session (Ablehnung, Abbruch) sind
-  sofort sichtbar: Die Mail bleibt mit ⚠ und Fehlertext im Postausgang.
-
-Erkenntnisse und Fragen Richtung Serverentwicklung werden in
-[../EXCHANGE.md](../EXCHANGE.md) ausgetauscht.
-
-## Lizenz
-
-Apache License 2.0 – siehe [LICENSE](LICENSE).
+Apache License 2.0 – see [LICENSE](LICENSE).
 Copyright © 2026 Christoph Flügel.
