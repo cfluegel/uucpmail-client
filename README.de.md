@@ -106,6 +106,21 @@ Schlüsselbund und ist im PGP-Tab löschbar. Hinweis: Das Key-Matching
 nutzt die UID des Schlüssels – weicht dessen E-Mail von der Kontakt-
 Adresse ab, greift die automatische Verschlüsselung nicht.
 
+## Self-Service / Dienststatus
+
+In den Einstellungen zeigt der Reiter „Tarif" den zuletzt abgefragten
+Dienststatus (Tarifname, Postfach-Quota und Belegung, Queue-Auslastung,
+Identitäten, Aufbewahrung unabgeholter Mail). Zwei Buttons reihen read-only
+`uuctl`-Abfragen (`GET quota`, `GET usage`) als normale UUCP-Jobs ein: ein
+Sync überträgt die Anfrage, der nächste holt die Antwort ab – sie kommt als
+gewöhnliche Mail an die Hauptadresse der Node und wird automatisch in den
+persistierten Status geparst. Dasselbe geht per Kommandozeile:
+
+```
+uucpmail-client ctl quota -sync   # Tarif & Limits abfragen
+uucpmail-client ctl usage -sync   # aktuellen Verbrauch abfragen
+```
+
 ## Grenzen des Store-and-Forward
 
 UUCP ist asynchron: „Gesendet" bedeutet **an den Server übergeben**, nicht

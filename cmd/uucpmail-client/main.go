@@ -24,6 +24,8 @@ func main() {
 		err = cmdSync(os.Args[2:])
 	case "queue":
 		err = cmdQueue(os.Args[2:])
+	case "ctl":
+		err = cmdCtl(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -47,5 +49,6 @@ Aufruf:
   uucpmail-client send <rcpt...>  Mail von stdin lesen und in die Outbox stellen
   uucpmail-client sync            UUCP-Session fahren (senden + abholen)
   uucpmail-client queue           Outbox/Spool-Status anzeigen
+  uucpmail-client ctl quota|usage Dienststatus abfragen (Antwort per Mail)
 `)
 }

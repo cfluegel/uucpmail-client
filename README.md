@@ -59,6 +59,21 @@ a row and add it via To/CC/BCC (multi-add, automatic separators, duplicate
 protection). Pasted public keys go into the central keyring; a contact with a
 key encrypts automatically.
 
+## Self-service / service status
+
+The settings dialog has a "Plan" tab showing the last known service status
+(plan name, mailbox quota and usage, queue utilisation, identities,
+retention of unfetched mail). Two buttons queue read-only `uuctl` queries
+(`GET quota`, `GET usage`) as regular UUCP jobs: one sync submits the
+request, the next one fetches the reply, which arrives as a normal mail to
+the node's main address and is parsed automatically into the persisted
+status. The same works from the command line:
+
+```
+uucpmail-client ctl quota -sync   # query plan & limits
+uucpmail-client ctl usage -sync   # query current usage
+```
+
 ## Encrypted identity backup
 
 Settings → Backup creates an encrypted backup of the client identity

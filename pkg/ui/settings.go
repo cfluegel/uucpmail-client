@@ -154,6 +154,7 @@ func (u *UI) showSettings(firstRun bool) {
 		container.NewTabItem(i18n.T("settings.ids"), idTab),
 		container.NewTabItem(i18n.T("settings.key"), keyTab),
 		container.NewTabItem(i18n.T("settings.pgp"), pgpTab),
+		container.NewTabItem(i18n.T("settings.tarif"), u.buildTarifTab(win)),
 		container.NewTabItem(i18n.T("settings.display"), miscTab),
 		container.NewTabItem(i18n.T("settings.backup"), u.buildBackupTab(win)),
 	)

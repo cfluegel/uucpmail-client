@@ -361,3 +361,40 @@ func TestEnqueueUsesSealer(t *testing.T) {
 		t.Error("Enqueue ohne Sealer nicht abgelehnt")
 	}
 }
+
+func TestEnqueueControlSendsUuctlJob(t *testing.T) {
+	e := newEngine(t)
+	if err := e.EnqueueControl("GET quota"); err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakeserver.Server{WantCaller: "u7a2f4c"}
+	res, err, serr := run(t, e, srv)
+	if err != nil || serr != nil {
+		t.Fatalf("client err=%v server err=%v", err, serr)
+	}
+	if res.SentCount != 1 {
+		t.Fatalf("res=%+v", res)
+	}
+	if len(srv.Received) != 2 {
+		t.Fatalf("dateien: %d", len(srv.Received))
+	}
+	data, xfile := srv.Received[0], srv.Received[1]
+	// Request roh, OHNE Envelope-Zeile.
+	if string(data.Data) != "GET quota\n" {
+		t.Errorf("request-daten: %q", data.Data)
+	}
+	x, err := uucp.ParseXFile(string(xfile.Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if x.Command != "uuctl" {
+		t.Errorf("x-kommando: %q", x.Command)
+	}
+	// Steuerjob erzeugt keine Outbox-/Sent-Kopie.
+	if msgs, _ := e.Store.List(store.Sent); len(msgs) != 0 {
+		t.Error("steuerjob landete in Gesendet")
+	}
+	if jobs, _ := e.Spool.Jobs(); len(jobs) != 0 {
+		t.Error("spool nicht leer")
+	}
+}

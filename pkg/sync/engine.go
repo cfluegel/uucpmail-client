@@ -18,7 +18,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
 )
 
-const Version = "1.0.1"
+const Version = "1.1.0"
 
 // Result fasst einen Sync-Lauf zusammen.
 type Result struct {
@@ -88,6 +88,23 @@ func (e *Engine) Enqueue(msg *compose.Message) (*store.Meta, error) {
 		return nil, err
 	}
 	return meta, nil
+}
+
+// EnqueueControl reiht einen uuctl-Self-Service-Request ein (z.B. "GET quota").
+// Reiner Steuerjob: keine Outbox-Kopie, keine Envelope-Zeile – uuctl liest
+// die Request-Zeile roh von stdin; die Antwort kommt als normale Mail an die
+// Node-Hauptadresse (zwei Syncs: einreichen, dann abholen).
+func (e *Engine) EnqueueControl(request string) error {
+	request = strings.TrimSpace(request)
+	if request == "" {
+		return fmt.Errorf("leerer Steuer-Request")
+	}
+	job := &uucp.Job{Command: "uuctl"}
+	if err := e.Spool.Enqueue([]byte(request+"\n"), job); err != nil {
+		return err
+	}
+	e.logf("Steuer-Anfrage eingereiht: %s", request)
+	return nil
 }
 
 // Run verbindet per SSH und fährt die komplette UUCP-Session.
@@ -224,6 +241,18 @@ func (e *Engine) execOne(xPath string) error {
 		return err
 	}
 	e.logf("neue Nachricht für %s (%d Bytes)", strings.Join(rcpts, ", "), len(body))
+	// uuctl-Antworten zusätzlich in den persistierten Dienststatus übernehmen.
+	if kind := parseUUCTLReply(body, &e.Cfg.ServiceStatus, time.Now()); kind != "" {
+		if kind == "quota" && e.Cfg.ServiceStatus.MaxMessageBytes > 0 {
+			// Senke: weiche Größenwarnung dem Server-Limit nachziehen.
+			e.Cfg.ServiceProfile.MaxMessageBytes = e.Cfg.ServiceStatus.MaxMessageBytes
+		}
+		if err := e.Cfg.Save(); err != nil {
+			e.logf("dienststatus speichern: %v", err)
+		} else {
+			e.logf("Dienststatus aktualisiert (%s, Tarif %s)", kind, e.Cfg.ServiceStatus.Tier)
+		}
+	}
 	_ = os.Remove(dataPath)
 	return os.Remove(xPath)
 }
@@ -256,8 +285,12 @@ func (e *Engine) QueueStatus() (string, error) {
 	}
 	var sb strings.Builder
 	for _, j := range jobs {
+		target := strings.Join(j.Recipients, ", ")
+		if j.Command != "" {
+			target = "[" + j.Command + "]"
+		}
 		fmt.Fprintf(&sb, "%s  %s  an %s  (Versuche: %d)",
-			j.Created.Format(time.DateTime), j.ID, strings.Join(j.Recipients, ", "), j.Attempts)
+			j.Created.Format(time.DateTime), j.ID, target, j.Attempts)
 		if j.LastError != "" {
 			fmt.Fprintf(&sb, "  Fehler: %s", j.LastError)
 		}

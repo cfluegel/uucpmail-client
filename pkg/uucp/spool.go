@@ -17,9 +17,10 @@ import (
 type Job struct {
 	ID         string    `json:"id"`
 	Recipients []string  `json:"recipients"`
-	Identity   string    `json:"identity"`   // Envelope-Sender
-	StoreID    string    `json:"store_id"`   // ID der Outbox-Kopie im Mail-Store
-	MessageID  string    `json:"message_id"` // RFC-5322 Message-ID
+	Command    string    `json:"command,omitempty"` // leer = "rmail <Recipients>"
+	Identity   string    `json:"identity"`          // Envelope-Sender
+	StoreID    string    `json:"store_id"`          // ID der Outbox-Kopie im Mail-Store
+	MessageID  string    `json:"message_id"`        // RFC-5322 Message-ID
 	Created    time.Time `json:"created"`
 	Attempts   int       `json:"attempts"`
 	LastError  string    `json:"last_error,omitempty"`

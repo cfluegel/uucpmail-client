@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ServiceProfile hält weiche Limits (Vorab-Warnungen). Die Durchsetzung liegt
@@ -17,6 +18,22 @@ import (
 type ServiceProfile struct {
 	MaxMessageBytes int64 `json:"max_message_bytes"`
 	WarnMsgsPerHour int   `json:"warn_msgs_per_hour"`
+}
+
+// ServiceStatus ist der zuletzt per uuctl abgefragte Dienststatus
+// (Quota/Tarif und Verbrauch); Zero-Zeitstempel = noch nie abgefragt.
+type ServiceStatus struct {
+	Tier            string    `json:"tier,omitempty"`
+	QuotaBytes      int64     `json:"quota_bytes,omitempty"`
+	MaxMessages     int       `json:"max_messages,omitempty"`
+	MaxMessageBytes int64     `json:"max_message_bytes,omitempty"`
+	RetentionDays   int       `json:"retention_days,omitempty"`
+	MaxAddresses    int       `json:"max_addresses,omitempty"`
+	UsedBytes       int64     `json:"used_bytes,omitempty"`
+	QueuedMessages  int       `json:"queued_messages,omitempty"`
+	UsedAddresses   int       `json:"used_addresses,omitempty"`
+	LastQuota       time.Time `json:"last_quota,omitempty"`
+	LastUsage       time.Time `json:"last_usage,omitempty"`
 }
 
 type Config struct {
@@ -31,6 +48,7 @@ type Config struct {
 	DraftAutosave   int            `json:"draft_autosave_min"` // Minuten, 0 = Default (10)
 	PGPCacheMin     int            `json:"pgp_cache_min"`      // Minuten, 0 = immer fragen
 	ServiceProfile  ServiceProfile `json:"service_profile"`
+	ServiceStatus   ServiceStatus  `json:"service_status,omitempty"`
 }
 
 // Defaults für den Free Tier von uucpmail.de.

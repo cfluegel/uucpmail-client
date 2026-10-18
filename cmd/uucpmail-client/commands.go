@@ -286,6 +286,44 @@ func splitList(s string) []string {
 	return out
 }
 
+// cmdCtl reicht eine uuctl-Self-Service-Anfrage ein (quota|usage).
+func cmdCtl(args []string) error {
+	fs := flag.NewFlagSet("ctl", flag.ContinueOnError)
+	now := fs.Bool("sync", false, "anschließend sofort eine UUCP-Session fahren")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rest := fs.Args()
+	what := ""
+	if len(rest) >= 1 {
+		what = strings.ToLower(rest[0])
+		// Flags dürfen auch nach dem Subkommando stehen (ctl quota -sync).
+		if err := fs.Parse(rest[1:]); err != nil {
+			return err
+		}
+	}
+	if what != "quota" && what != "usage" || fs.NArg() > 0 {
+		return errors.New("aufruf: uucpmail-client ctl quota|usage [-sync]")
+	}
+	cfg, err := requireConfig()
+	if err != nil {
+		return err
+	}
+	eng, closeFn, err := openEngine(cfg, stderrLog)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+	if err := eng.EnqueueControl("GET " + what); err != nil {
+		return err
+	}
+	fmt.Println("Anfrage eingereiht – Antwort kommt als Mail an die Hauptadresse (zweiter Sync nötig).")
+	if *now {
+		return runSync(eng)
+	}
+	return nil
+}
+
 func cmdSync(args []string) error {
 	cfg, err := requireConfig()
 	if err != nil {

@@ -55,7 +55,11 @@ func (s *Session) Run() (*SessionResult, error) {
 			res.Failed = append(res.Failed, job)
 			continue
 		}
-		s.logf("Job %s an Server übergeben (%s) – Zustellung erfolgt asynchron", job.ID, strings.Join(job.Recipients, ", "))
+		what := strings.Join(job.Recipients, ", ")
+		if job.Command != "" {
+			what = job.Command
+		}
+		s.logf("Job %s an Server übergeben (%s) – Zustellung erfolgt asynchron", job.ID, what)
 		res.Sent = append(res.Sent, job)
 	}
 
@@ -110,8 +114,11 @@ func (s *Session) sendJob(job *Job) error {
 		return fmt.Errorf("datendatei: %w", err)
 	}
 
-	xContent := BuildXFile("uucpmail", s.NodeName, dataName,
-		"rmail "+strings.Join(job.Recipients, " "))
+	command := job.Command
+	if command == "" {
+		command = "rmail " + strings.Join(job.Recipients, " ")
+	}
+	xContent := BuildXFile("uucpmail", s.NodeName, dataName, command)
 	if err := s.sendFile("D."+xName[2:], xName, strings.NewReader(xContent), int64(len(xContent))); err != nil {
 		return fmt.Errorf("execute-datei: %w", err)
 	}
