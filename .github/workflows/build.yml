@@ -2,7 +2,16 @@ name: build
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
+
+permissions:
+  contents: write # für das automatische Release bei v*-Tags
+
+env:
+  # Fyne braucht unter Linux GL-, X11- UND Wayland-Header (Fyne ≥ 2.8).
+  LINUX_DEPS: libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 
 jobs:
   test:
@@ -11,14 +20,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
-      - run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+          go-version: "stable"
+      - run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
       - run: go vet ./...
       - run: go test ./...
       - name: Schwachstellen-Scan (govulncheck)
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  release-build:
+  release:
+    # Läuft nur für Versions-Tags; baut alle Plattformen und hängt die
+    # Artefakte an ein automatisch erstelltes GitHub-Release.
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: test
     strategy:
       matrix:
@@ -40,13 +52,30 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24"
+          go-version: "stable"
       - name: Linux-Abhängigkeiten
         if: matrix.goos == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev xorg-dev
+        run: sudo apt-get update && sudo apt-get install -y $LINUX_DEPS
       - name: Build
-        run: go build -ldflags="-s -w" -o uucpmail-client${{ matrix.goos == 'windows' && '.exe' || '' }} ./cmd/uucpmail-client
-      - uses: actions/upload-artifact@v4
+        shell: bash
+        run: |
+          EXT=""
+          [ "${{ matrix.goos }}" = "windows" ] && EXT=".exe"
+          go build -trimpath -ldflags="-s -w" -o "uucpmail-client${EXT}" ./cmd/uucpmail-client
+      - name: Paketieren
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          NAME="uucpmail-client_${VERSION}_${{ matrix.goos }}_${{ matrix.arch }}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            7z a "${NAME}.zip" uucpmail-client.exe LICENSE README.md > /dev/null
+            echo "ASSET=${NAME}.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "${NAME}.tar.gz" uucpmail-client LICENSE README.md
+            echo "ASSET=${NAME}.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - name: Release erstellen/ergänzen
+        uses: softprops/action-gh-release@v2
         with:
-          name: uucpmail-client_${{ matrix.goos }}_${{ matrix.arch }}
-          path: uucpmail-client*
+          files: ${{ env.ASSET }}
+          generate_release_notes: true
