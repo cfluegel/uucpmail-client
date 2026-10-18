@@ -44,9 +44,6 @@ jobs:
           - os: macos-latest
             goos: darwin
             arch: arm64
-          - os: macos-13
-            goos: darwin
-            arch: amd64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
