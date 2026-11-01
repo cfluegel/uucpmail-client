@@ -155,7 +155,9 @@ first sync.
 Details and background: README section "FIDO2 security key for SSH".
 Short version: check the box in the SSH tab → PIN → adopt an existing
 resident key or create a new one → register the shown line with the
-service. Every connection asks for the PIN and requires a token touch.
+service. Every connection asks for the PIN and requires a token touch;
+while the token waits for the touch, a small "Touch your security key …"
+popup indicates the waiting state and closes by itself.
 
 ---
 

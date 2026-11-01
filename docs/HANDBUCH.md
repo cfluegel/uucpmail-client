@@ -164,7 +164,9 @@ Details und Hintergrund: README-Abschnitt „FIDO2-Security-Key für SSH".
 Kurzfassung: Haken im SSH-Tab setzen → PIN → vorhandenen residenten
 Schlüssel übernehmen oder neu erzeugen → angezeigte Zeile beim Dienst
 registrieren. Jede Verbindung fragt die PIN ab und verlangt eine
-Berührung des Tokens.
+Berührung des Tokens; solange das Token auf die Berührung wartet, zeigt
+ein kleines Popup „Security-Key berühren …" den Wartezustand an und
+schließt sich von selbst.
 
 ---
 

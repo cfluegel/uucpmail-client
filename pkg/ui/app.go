@@ -37,6 +37,7 @@ type UI struct {
 	contentZone   *focusZone
 	activeZone    zoneID
 	state         *uiState
+	touchDlg      dialog.Dialog // Touch-Hinweis-Popup, nur im Fyne-Thread (fyne.Do)
 	log           sessionLog
 	keyring       *pgp.Keyring
 	pgpCache      *pgp.Cache

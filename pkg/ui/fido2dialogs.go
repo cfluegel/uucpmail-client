@@ -59,10 +59,35 @@ func (p uiPrompter) RequestPIN(ctx context.Context) (string, error) {
 	}
 }
 
+// NotifyTouch zeigt ein modales Popup („Security-Key berühren …") mit
+// Aktivitätsbalken. Bewusst ohne Schließen-Knopf: Es spiegelt einen
+// Hardware-Wartezustand und verschwindet von selbst, sobald das Token
+// berührt wurde bzw. die Operation fehlschlägt oder abläuft (TouchDone
+// kommt per defer aus dem Backend).
 func (p uiPrompter) NotifyTouch() {
-	fyne.Do(func() { p.u.log.append(i18n.T("fido2.touch")) })
+	fyne.Do(func() {
+		p.u.log.append(i18n.T("fido2.touch"))
+		if p.u.touchDlg != nil {
+			return
+		}
+		msg := widget.NewLabel(i18n.T("fido2.touch"))
+		msg.Alignment = fyne.TextAlignCenter
+		d := dialog.NewCustomWithoutButtons(i18n.T("fido2.title"),
+			container.NewVBox(msg, widget.NewProgressBarInfinite()), p.u.win)
+		d.Resize(fyne.NewSize(340, 130))
+		d.Show()
+		p.u.touchDlg = d
+	})
 }
-func (p uiPrompter) TouchDone() {}
+
+func (p uiPrompter) TouchDone() {
+	fyne.Do(func() {
+		if p.u.touchDlg != nil {
+			p.u.touchDlg.Hide()
+			p.u.touchDlg = nil
+		}
+	})
+}
 
 // installSignerSource verdrahtet die SSH-Signer-Quelle gemäß Config.
 func (u *UI) installSignerSource() {
