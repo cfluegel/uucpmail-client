@@ -30,6 +30,8 @@ var Files = []string{
 	"pubring.asc",
 	"secring.asc",
 	"contacts.json",
+	"fido2_key.json", // FIDO2-Stub (kein Schlüsselmaterial, aber spart Re-Enrollment)
+	"ui_state.json",
 }
 
 // ErrWrongPassphrase signalisiert eine falsche Backup-Passphrase.

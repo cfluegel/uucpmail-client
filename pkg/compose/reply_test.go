@@ -74,3 +74,17 @@ func TestFilterOwn(t *testing.T) {
 		t.Errorf("got: %v", got)
 	}
 }
+
+func TestSignatureBlock(t *testing.T) {
+	got := SignatureBlock("Gruß\nChristoph\n\n")
+	want := "\n\n-- \nGruß\nChristoph\n"
+	if got != want {
+		t.Fatalf("SignatureBlock = %q, erwartet %q", got, want)
+	}
+	if SignatureBlock("") != "" || SignatureBlock("  \n ") != "" {
+		t.Fatal("leere Signatur muss leeren Block liefern")
+	}
+	if !strings.Contains(SignatureBlock("x"), "\n-- \n") {
+		t.Fatal("Trennzeichen '-- ' (mit Leerzeichen) fehlt")
+	}
+}

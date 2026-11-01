@@ -3,6 +3,7 @@ package ui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -102,10 +103,13 @@ func (l *mailHeaderLayout) Layout(objs []fyne.CanvasObject, size fyne.Size) {
 }
 
 // tapRow macht eine Listenzeile doppelklick-fähig (Entwurf öffnen); einfache
-// Klicks laufen weiter über die List-Selektion.
+// Klicks laufen weiter über die List-Selektion. Für die Mehrfachauswahl
+// zeichnet ein Hintergrund-Rechteck den markierten Bereich (Zeilen werden von
+// widget.List recycelt, der Zustand kommt daher aus UpdateItem).
 type tapRow struct {
 	widget.BaseWidget
 	content  fyne.CanvasObject
+	bg       *canvas.Rectangle
 	index    int
 	onSingle func()
 	onDouble func()
@@ -113,12 +117,27 @@ type tapRow struct {
 
 func newTapRow(content fyne.CanvasObject) *tapRow {
 	r := &tapRow{content: content, index: -1}
+	r.bg = canvas.NewRectangle(theme.Color(theme.ColorNameSelection))
+	r.bg.Hide()
 	r.ExtendBaseWidget(r)
 	return r
 }
 
+func (r *tapRow) setSelected(sel bool) {
+	if sel == r.bg.Visible() {
+		return
+	}
+	if sel {
+		r.bg.FillColor = theme.Color(theme.ColorNameSelection)
+		r.bg.Show()
+	} else {
+		r.bg.Hide()
+	}
+	r.bg.Refresh()
+}
+
 func (r *tapRow) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(r.content)
+	return widget.NewSimpleRenderer(container.NewStack(r.bg, r.content))
 }
 
 // MouseDown selektiert sofort – Tapped würde wegen der Doppelklick-

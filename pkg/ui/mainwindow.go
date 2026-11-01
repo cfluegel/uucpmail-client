@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
 	"mime"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/cfluegel/uucpmail-client/pkg/compose"
+	"github.com/cfluegel/uucpmail-client/pkg/contacts"
 	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
 	"github.com/cfluegel/uucpmail-client/pkg/pgp"
@@ -36,33 +39,39 @@ func (u *UI) buildMainWindow() {
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { u.showSettings(false) }),
 	)
 
-	split := container.NewVSplit(u.messageList.root, u.messageView.widget)
-	prefs := u.app.Preferences()
-	split.SetOffset(prefs.FloatWithFallback("win.split", 0.45))
+	u.listZone = newFocusZone(u.messageList.root,
+		func(ev *fyne.KeyEvent, shift bool) { u.handleZoneKey(zoneList, ev, shift) },
+		u.toggleZone, func() { u.activeZone = zoneList })
+	u.contentZone = newFocusZone(u.messageView.widget,
+		func(ev *fyne.KeyEvent, shift bool) { u.handleZoneKey(zoneContent, ev, shift) },
+		u.toggleZone, func() { u.activeZone = zoneContent })
+	split := container.NewVSplit(u.listZone, u.contentZone)
+	split.SetOffset(u.state.SplitOffset)
 
 	top := container.NewVBox(toolbar, u.folderList.widget)
 	u.win.SetContent(container.NewBorder(top, u.statusBar.widget, nil, nil, split))
 
 	// Fenstergröße, Vollbild und Split-Position über Neustarts erhalten.
-	w := float32(prefs.FloatWithFallback("win.width", 1000))
-	h := float32(prefs.FloatWithFallback("win.height", 680))
-	u.win.Resize(fyne.NewSize(w, h))
-	if prefs.BoolWithFallback("win.fullscreen", false) {
+	u.win.Resize(fyne.NewSize(float32(u.state.WinW), float32(u.state.WinH)))
+	if u.state.Fullscreen {
 		u.win.SetFullScreen(true)
 	}
 	u.win.SetCloseIntercept(func() {
-		prefs.SetFloat("win.split", split.Offset)
-		prefs.SetBool("win.fullscreen", u.win.FullScreen())
+		u.state.SplitOffset = split.Offset
+		u.state.Fullscreen = u.win.FullScreen()
 		if !u.win.FullScreen() {
 			size := u.win.Canvas().Size()
-			prefs.SetFloat("win.width", float64(size.Width))
-			prefs.SetFloat("win.height", float64(size.Height))
+			u.state.WinW = float64(size.Width)
+			u.state.WinH = float64(size.Height)
 		}
+		u.state.save()
 		u.win.Close()
 	})
 
-	u.setupShortcuts()
+	u.setupKeyboard()
 	u.refresh()
+	// Start: Tastaturfokus in der Mailliste (Posteingang ist der Default-Ordner).
+	u.win.Canvas().Focus(u.listZone)
 }
 
 // ---- Ordner-Tabs ----
@@ -125,22 +134,91 @@ type messagePanel struct {
 	sortAsc bool              // false = neueste zuerst (Standard)
 	u       *UI
 	metas   []*store.Meta
+	// Zusammenhängende Mehrfachauswahl: Bereich [anchor,cursor], -1 = keine.
+	// Der Cursor ist zugleich die in der Ansicht gezeigte Nachricht.
+	anchor int
+	cursor int
+}
+
+// moveCursor bewegt den Listen-Cursor; extend=true (Shift) erweitert die
+// Auswahl vom Anker aus, sonst kollabiert sie auf den Cursor.
+func (p *messagePanel) moveCursor(delta int, extend bool) {
+	if len(p.metas) == 0 {
+		return
+	}
+	c := p.cursor
+	if c < 0 {
+		c = 0
+	} else {
+		c += delta
+		if c < 0 {
+			c = 0
+		}
+		if c >= len(p.metas) {
+			c = len(p.metas) - 1
+		}
+	}
+	p.cursor = c
+	if !extend || p.anchor < 0 {
+		p.anchor = c
+	}
+	// Select zeigt die Nachricht (OnSelected) und scrollt den Cursor sichtbar.
+	p.widget.Select(c)
+	p.widget.Refresh() // Bereichs-Hintergründe auf recycelten Zeilen neu malen
+}
+
+func (p *messagePanel) selRange() (int, int) {
+	if p.anchor < 0 || p.cursor < 0 {
+		return -1, -1
+	}
+	lo, hi := p.anchor, p.cursor
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return lo, hi
+}
+
+func (p *messagePanel) isSelected(i int) bool {
+	lo, hi := p.selRange()
+	return lo >= 0 && i >= lo && i <= hi
+}
+
+func (p *messagePanel) selectionCount() int {
+	lo, hi := p.selRange()
+	if lo < 0 {
+		return 0
+	}
+	return hi - lo + 1
+}
+
+// selectedMetas liefert die markierten Nachrichten (Listenreihenfolge).
+func (p *messagePanel) selectedMetas() []*store.Meta {
+	lo, hi := p.selRange()
+	if lo < 0 {
+		return nil
+	}
+	if hi >= len(p.metas) {
+		hi = len(p.metas) - 1
+	}
+	return p.metas[lo : hi+1]
+}
+
+func (p *messagePanel) resetSelection() {
+	p.anchor, p.cursor = -1, -1
 }
 
 func newMessagePanel(u *UI) *messagePanel {
-	p := &messagePanel{u: u}
-	prefs := u.app.Preferences()
+	p := &messagePanel{u: u, anchor: -1, cursor: -1}
 	p.cols = &mailColumns{
-		fromW: float32(prefs.FloatWithFallback("col.from", 200)),
-		toW:   float32(prefs.FloatWithFallback("col.to", 180)),
-		dateW: float32(prefs.FloatWithFallback("col.date", 130)),
+		fromW: float32(u.state.ColFrom),
+		toW:   float32(u.state.ColTo),
+		dateW: float32(u.state.ColDate),
 	}
 	p.widget = widget.NewList(
 		func() int { return len(p.metas) },
 		func() fyne.CanvasObject {
 			unread := widget.NewLabel("●")
 			from := widget.NewLabel("from")
-			from.TextStyle.Bold = true
 			from.Truncation = fyne.TextTruncateEllipsis
 			to := widget.NewLabel("to")
 			to.Truncation = fyne.TextTruncateEllipsis
@@ -154,7 +232,13 @@ func newMessagePanel(u *UI) *messagePanel {
 			wrap := newTapRow(row)
 			wrap.onSingle = func() {
 				if wrap.index >= 0 {
+					p.anchor, p.cursor = wrap.index, wrap.index
 					p.widget.Select(wrap.index)
+					p.widget.Refresh()
+					// Klick in die Liste holt den Tastaturfokus zurück.
+					if u.listZone != nil {
+						u.win.Canvas().Focus(u.listZone)
+					}
 				}
 			}
 			wrap.onDouble = func() {
@@ -172,6 +256,7 @@ func newMessagePanel(u *UI) *messagePanel {
 			m := p.metas[i]
 			wrap := o.(*tapRow)
 			wrap.index = i
+			wrap.setSelected(p.isSelected(i))
 			row := wrap.content.(*fyne.Container)
 			unread := row.Objects[0].(*widget.Label)
 			from := row.Objects[1].(*widget.Label)
@@ -205,7 +290,7 @@ func newMessagePanel(u *UI) *messagePanel {
 
 	// Überschriftenzeile mit ziehbaren Spaltentrennern; die Datum-Überschrift
 	// ist klickbar und schaltet die Sortierrichtung um.
-	p.sortAsc = prefs.BoolWithFallback("sort.dateAsc", false)
+	p.sortAsc = u.state.SortDateAsc
 	hFrom := widget.NewLabel(i18n.T("list.from"))
 	hFrom.TextStyle.Bold = true
 	hTo := widget.NewLabel(i18n.T("list.to"))
@@ -217,7 +302,8 @@ func newMessagePanel(u *UI) *messagePanel {
 	hDate.Alignment = widget.ButtonAlignLeading
 	hDate.OnTapped = func() {
 		p.sortAsc = !p.sortAsc
-		prefs.SetBool("sort.dateAsc", p.sortAsc)
+		u.state.SortDateAsc = p.sortAsc
+		u.state.save()
 		hDate.SetText(p.dateHeaderText())
 		p.load(u.currentFolder)
 	}
@@ -231,9 +317,10 @@ func newMessagePanel(u *UI) *messagePanel {
 		p.widget.Refresh()
 	}
 	persist := func() {
-		prefs.SetFloat("col.from", float64(p.cols.fromW))
-		prefs.SetFloat("col.to", float64(p.cols.toW))
-		prefs.SetFloat("col.date", float64(p.cols.dateW))
+		u.state.ColFrom = float64(p.cols.fromW)
+		u.state.ColTo = float64(p.cols.toW)
+		u.state.ColDate = float64(p.cols.dateW)
+		u.state.save()
 	}
 	divFrom := newColDivider(func(dx float32) {
 		p.cols.fromW = clamp(p.cols.fromW+dx, colMinFrom, 500)
@@ -275,6 +362,7 @@ func (p *messagePanel) load(folder string) {
 		}
 	}
 	p.metas = metas
+	p.resetSelection()
 	p.widget.UnselectAll()
 	p.widget.Refresh()
 }
@@ -282,26 +370,29 @@ func (p *messagePanel) load(folder string) {
 // ---- Nachrichtenansicht ----
 
 type viewPanel struct {
-	widget    fyne.CanvasObject
-	header    *widget.Label
-	pgpStatus *widget.Label
-	body      *widget.Label
-	bodyWrap  fyne.CanvasObject
-	htmlBody  *widget.RichText
-	htmlWrap  fyne.CanvasObject
-	attachBar *fyne.Container
-	actions   *fyne.Container
-	editBtn   *widget.Button
-	srcBtn    *widget.Button
-	decBtn    *widget.Button
-	u         *UI
-	current   *store.Meta
-	raw       []byte
-	pmOuter   *mailmime.ParsedMessage
-	decrypted *mailmime.ParsedMessage // nur im Speicher, nie auf Platte
-	decFor    string                  // Store-ID, zu der decrypted gehört
-	decSig    pgp.SigResult
-	showSrc   bool
+	widget     fyne.CanvasObject
+	header     *widget.Label
+	pgpStatus  *widget.Label
+	body       *widget.Label
+	bodyWrap   *container.Scroll
+	htmlBody   *widget.RichText
+	htmlWrap   *container.Scroll
+	attachBar  *fyne.Container
+	actions    *fyne.Container
+	editBtn    *widget.Button
+	restoreBtn *widget.Button
+	unreadBtn  *widget.Button
+	resendBtn  *widget.Button
+	srcBtn     *widget.Button
+	decBtn     *widget.Button
+	u          *UI
+	current    *store.Meta
+	raw        []byte
+	pmOuter    *mailmime.ParsedMessage
+	decrypted  *mailmime.ParsedMessage // nur im Speicher, nie auf Platte
+	decFor     string                  // Store-ID, zu der decrypted gehört
+	decSig     pgp.SigResult
+	showSrc    bool
 }
 
 func newViewPanel(u *UI) *viewPanel {
@@ -325,8 +416,9 @@ func newViewPanel(u *UI) *viewPanel {
 	p.attachBar = container.NewHBox()
 	p.attachBar.Hide()
 
-	deleteBtn := widget.NewButtonWithIcon(i18n.T("msg.delete"), theme.DeleteIcon(), func() {
-		p.deleteCurrent()
+	deleteBtn := widget.NewButtonWithIcon(i18n.T("msg.delete")+" ("+i18n.T("key.del")+")", theme.DeleteIcon(), func() {
+		// Wirkt wie die Entf-Taste auf die gesamte Markierung.
+		u.deleteSelection()
 	})
 	p.editBtn = widget.NewButton(i18n.T("compose.edit"), func() {
 		if p.current != nil && p.current.Folder == store.Drafts {
@@ -337,20 +429,32 @@ func newViewPanel(u *UI) *viewPanel {
 		p.showSrc = !p.showSrc
 		p.renderCurrent()
 	})
-	replyBtn := widget.NewButtonWithIcon(i18n.T("msg.reply"), theme.MailReplyIcon(), func() {
+	replyBtn := widget.NewButtonWithIcon(i18n.T("msg.reply")+" (r)", theme.MailReplyIcon(), func() {
 		p.composeReply(false)
 	})
-	replyAllBtn := widget.NewButtonWithIcon(i18n.T("msg.replyall"), theme.MailReplyAllIcon(), func() {
+	replyAllBtn := widget.NewButtonWithIcon(i18n.T("msg.replyall")+" (Shift+r)", theme.MailReplyAllIcon(), func() {
 		p.composeReply(true)
 	})
-	forwardBtn := widget.NewButtonWithIcon(i18n.T("msg.forward"), theme.MailForwardIcon(), func() {
+	forwardBtn := widget.NewButtonWithIcon(i18n.T("msg.forward")+" (f)", theme.MailForwardIcon(), func() {
 		p.composeForward()
 	})
 	p.decBtn = widget.NewButton(i18n.T("pgp.decrypt.btn"), func() {
 		p.decryptWithPrompt()
 	})
 	p.decBtn.Hide()
-	p.actions = container.NewHBox(replyBtn, replyAllBtn, forwardBtn, p.decBtn, p.editBtn, p.srcBtn, deleteBtn)
+	p.restoreBtn = widget.NewButtonWithIcon(i18n.T("msg.restore"), theme.ContentUndoIcon(), func() {
+		u.restoreSelected()
+	})
+	p.restoreBtn.Hide()
+	p.unreadBtn = widget.NewButtonWithIcon(i18n.T("msg.unread")+" (u)", theme.VisibilityOffIcon(), func() {
+		u.markSelectionUnread()
+	})
+	p.unreadBtn.Hide()
+	p.resendBtn = widget.NewButtonWithIcon(i18n.T("msg.editasnew"), theme.DocumentCreateIcon(), func() {
+		p.composeEditAsNew()
+	})
+	p.resendBtn.Hide()
+	p.actions = container.NewHBox(replyBtn, replyAllBtn, forwardBtn, p.decBtn, p.editBtn, p.restoreBtn, p.unreadBtn, p.resendBtn, p.srcBtn, deleteBtn)
 	p.actions.Hide()
 	bodyStack := container.NewStack(p.bodyWrap, p.htmlWrap)
 	p.widget = container.NewBorder(
@@ -414,6 +518,21 @@ func (p *viewPanel) show(m *store.Meta) {
 		p.editBtn.Show()
 	} else {
 		p.editBtn.Hide()
+	}
+	if m.Folder == store.Trash {
+		p.restoreBtn.Show()
+	} else {
+		p.restoreBtn.Hide()
+	}
+	if m.Folder == store.Inbox {
+		p.unreadBtn.Show()
+	} else {
+		p.unreadBtn.Hide()
+	}
+	if m.Folder == store.Sent {
+		p.resendBtn.Show()
+	} else {
+		p.resendBtn.Hide()
 	}
 	p.actions.Show()
 
@@ -523,12 +642,82 @@ func (p *viewPanel) renderParsed(pm *mailmime.ParsedMessage) {
 			p.attachBar.Add(widget.NewButtonWithIcon(label, theme.DownloadIcon(), func() {
 				p.saveAttachment(att)
 			}))
+			if isPublicKeyAttachment(att) {
+				p.attachBar.Add(widget.NewButtonWithIcon(i18n.T("pgp.import.attach"),
+					theme.ContentAddIcon(), func() {
+						p.importKeyAttachment(att)
+					}))
+			}
 		}
 		p.attachBar.Show()
 		p.attachBar.Refresh()
 	} else {
 		p.attachBar.Hide()
 	}
+}
+
+// isPublicKeyAttachment erkennt Anhänge mit öffentlichem PGP-Schlüssel:
+// deklarierter Content-Type oder Armor-Block am Inhaltsanfang (fängt auch
+// Clients, die .asc als text/plain schicken).
+func isPublicKeyAttachment(att mailmime.Part) bool {
+	if att.MediaType == "application/pgp-keys" {
+		return true
+	}
+	return bytes.HasPrefix(bytes.TrimSpace(att.Data), []byte("-----BEGIN PGP PUBLIC KEY BLOCK-----"))
+}
+
+// importKeyAttachment übernimmt den Schlüssel aus dem Anhang in den
+// Schlüsselbund und bietet an, den Absender ins Adressbuch zu übernehmen.
+func (p *viewPanel) importKeyAttachment(att mailmime.Part) {
+	u := p.u
+	infos, err := u.keyring.ImportPublic(att.Data)
+	if err != nil {
+		if strings.Contains(err.Error(), "kein neuer Schlüssel") {
+			dialog.ShowInformation(i18n.T("pgp.import.attach"), i18n.T("pgp.import.exists"), u.win)
+		} else {
+			u.showError(err)
+		}
+		return
+	}
+	u.log.append(fmt.Sprintf(i18n.T("pgp.import.done"), len(infos)))
+
+	// Absender anbieten: vorhandenen Kontakt um den Schlüssel ergänzen,
+	// sonst den Editierdialog vorbefüllt öffnen.
+	if p.current == nil {
+		return
+	}
+	addr, err := mail.ParseAddress(p.current.From)
+	if err != nil {
+		return
+	}
+	u.showConfirmKeyboard(i18n.T("pgp.import.attach"),
+		fmt.Sprintf(i18n.T("pgp.import.contact.ask"), addr.Address), func(ok bool) {
+			if !ok {
+				return
+			}
+			fpr := pickKeyForEmail(infos, addr.Address)
+			if existing, found := u.contacts.FindByEmail(addr.Address); found {
+				existing.KeyFingerprint = fpr
+				if err := u.contacts.Update(existing.Email, existing); err != nil {
+					u.showError(contactErr(err))
+				}
+				return
+			}
+			first, last := splitDisplayName(addr.Name)
+			u.showContactEditDialogPrefilled(u.win, nil, contacts.Contact{
+				FirstName: first, LastName: last,
+				Email: addr.Address, KeyFingerprint: fpr,
+			}, "", func() {})
+		})
+}
+
+// splitDisplayName teilt einen Anzeigenamen grob in Vor- und Nachname.
+func splitDisplayName(name string) (string, string) {
+	fields := strings.Fields(name)
+	if len(fields) == 0 {
+		return "", ""
+	}
+	return fields[0], strings.Join(fields[1:], " ")
 }
 
 // setSigStatus zeigt die Signatur-/Verschlüsselungs-Statuszeile.
@@ -662,19 +851,17 @@ func (p *viewPanel) decryptWith(ents pgp.EntityList, showErrors bool) bool {
 	return true
 }
 
-// deleteCurrent löscht die ausgewählte Nachricht (mit Bestätigung); bei
-// Outbox-Mails wird der zugehörige Spool-Job mit storniert.
+// deleteCurrent löscht die ausgewählte Nachricht: außerhalb des Papierkorbs
+// ohne Rückfrage in den Papierkorb (rückholbar), im Papierkorb endgültig mit
+// Bestätigung. Bei Outbox-Mails wird der zugehörige Spool-Job mit storniert.
 func (p *viewPanel) deleteCurrent() {
 	if p.current == nil {
 		return
 	}
 	u := p.u
 	m := p.current
-	dialog.ShowConfirm(i18n.T("msg.delete"), i18n.T("msg.delete.confirm"), func(ok bool) {
-		if !ok {
-			return
-		}
-		if err := u.store.Delete(m.Folder, m.ID); err != nil {
+	if m.Folder != store.Trash {
+		if err := u.store.MoveToTrash(m.Folder, m.ID); err != nil {
 			u.showError(err)
 			return
 		}
@@ -685,7 +872,170 @@ func (p *viewPanel) deleteCurrent() {
 		}
 		p.clear()
 		u.refresh()
-	}, u.win)
+		return
+	}
+	u.showConfirmKeyboard(i18n.T("msg.delete"), i18n.T("msg.delete.confirm"), func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := u.store.Delete(m.Folder, m.ID); err != nil {
+			u.showError(err)
+			return
+		}
+		p.clear()
+		u.refresh()
+	})
+}
+
+// scrollBody scrollt die sichtbare Inhaltsansicht um lines Textzeilen
+// (negativ = nach oben). Der Body ist EIN Label/RichText – gescrollt wird
+// daher über Offset-Arithmetik mit der gemessenen Zeilenhöhe.
+func (p *viewPanel) scrollBody(lines int) {
+	sc := p.bodyWrap
+	if p.htmlWrap.Visible() {
+		sc = p.htmlWrap
+	}
+	lineH := fyne.MeasureText("M", theme.TextSize(), fyne.TextStyle{Monospace: true}).Height
+	y := sc.Offset.Y + lineH*float32(lines)
+	if max := sc.Content.MinSize().Height - sc.Size().Height; y > max {
+		y = max
+	}
+	if y < 0 {
+		y = 0
+	}
+	sc.ScrollToOffset(fyne.NewPos(sc.Offset.X, y))
+}
+
+// deleteSelection löscht die aktuelle Auswahl: eine Mail läuft über den
+// Einzel-Pfad (deleteCurrent), mehrere immer mit Rückfrage – außerhalb des
+// Papierkorbs in den Papierkorb, im Papierkorb endgültig.
+func (u *UI) deleteSelection() {
+	metas := u.messageList.selectedMetas()
+	if len(metas) <= 1 {
+		u.messageView.deleteCurrent()
+		return
+	}
+	inTrash := u.currentFolder == store.Trash
+	msg := fmt.Sprintf(i18n.T("msg.delete.multi.confirm"), len(metas))
+	if inTrash {
+		msg = fmt.Sprintf(i18n.T("msg.trash.delete.multi.confirm"), len(metas))
+	}
+	u.showConfirmKeyboard(i18n.T("msg.delete"), msg, func(ok bool) {
+		if !ok {
+			return
+		}
+		for _, m := range metas {
+			var err error
+			if inTrash {
+				err = u.store.Delete(m.Folder, m.ID)
+			} else {
+				err = u.store.MoveToTrash(m.Folder, m.ID)
+			}
+			if err != nil {
+				u.showError(err)
+				break
+			}
+			if m.Folder == store.Outbox {
+				if err := u.engine.CancelByStoreID(m.ID); err != nil {
+					u.showError(err)
+				}
+			}
+		}
+		u.messageView.clear()
+		u.refresh()
+	})
+}
+
+// forwardSelectedAsEML öffnet eine neue Mail mit allen markierten Nachrichten
+// als message/rfc822-Anhängen (Original-Rohdaten, verschlüsselte als Chiffrat).
+func (u *UI) forwardSelectedAsEML() {
+	metas := u.messageList.selectedMetas()
+	if len(metas) == 0 {
+		return
+	}
+	var atts []compose.Attachment
+	for _, m := range metas {
+		raw, err := u.store.Raw(m.Folder, m.ID)
+		if err != nil {
+			u.showError(err)
+			return
+		}
+		atts = append(atts, compose.Attachment{
+			Filename: sanitizeFilename(m.Subject) + ".eml",
+			Data:     raw,
+			MIMEType: "message/rfc822",
+		})
+	}
+	subject := fmt.Sprintf(i18n.T("fwd.multi.subject"), len(metas))
+	u.showComposeWindow(nil, &prefill{Subject: subject, Attachments: atts, FocusBody: false})
+}
+
+// sanitizeFilename macht einen Betreff als Dateinamen verwendbar.
+func sanitizeFilename(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "message"
+	}
+	repl := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "\x00", "_")
+	s = repl.Replace(s)
+	if r := []rune(s); len(r) > 60 {
+		s = string(r[:60])
+	}
+	return s
+}
+
+// markSelectionUnread setzt alle markierten Posteingangs-Mails (Fallback:
+// die angezeigte) wieder auf ungelesen. In anderen Ordnern No-op – nur dort
+// haben Punkt und Zähler eine Bedeutung.
+func (u *UI) markSelectionUnread() {
+	if u.currentFolder != store.Inbox {
+		return
+	}
+	metas := u.messageList.selectedMetas()
+	if len(metas) == 0 && u.messageView.current != nil {
+		metas = []*store.Meta{u.messageView.current}
+	}
+	changed := false
+	for _, m := range metas {
+		if m.Folder != store.Inbox || !m.Read {
+			continue
+		}
+		if err := u.store.SetRead(m.Folder, m.ID, false); err != nil {
+			u.showError(err)
+			break
+		}
+		m.Read = false // in-memory-Meta treibt den ●-Punkt in der Liste
+		changed = true
+	}
+	if changed {
+		u.folderList.refresh()
+		u.messageList.widget.Refresh()
+	}
+}
+
+// restoreSelected verschiebt alle markierten Papierkorb-Nachrichten zurück in
+// ihre Herkunftsordner (ohne Markierung: die angezeigte Nachricht).
+func (u *UI) restoreSelected() {
+	metas := u.messageList.selectedMetas()
+	if len(metas) == 0 && u.messageView.current != nil {
+		metas = []*store.Meta{u.messageView.current}
+	}
+	restored := false
+	for _, m := range metas {
+		if m.Folder != store.Trash {
+			continue
+		}
+		if err := u.store.RestoreFromTrash(m.ID); err != nil {
+			u.showError(err)
+			break
+		}
+		restored = true
+	}
+	if restored {
+		u.messageView.clear()
+		u.refresh()
+		u.focusZone(zoneList)
+	}
 }
 
 // effectiveParsed liefert das anzuzeigende Modell: bei entschlüsselten
@@ -731,9 +1081,9 @@ func (p *viewPanel) composeReply(all bool) {
 		p.u.showError(err)
 		return
 	}
-	replyTo := pm.Header.Get("Reply-To")
+	replyTo := decodeAddressList(pm.Header.Get("Reply-To"))
 	if replyTo == "" {
-		replyTo = pm.Header.Get("From")
+		replyTo = decodeAddressList(pm.Header.Get("From"))
 	}
 	toList := []string{replyTo}
 	ccJoined := ""
@@ -795,6 +1145,44 @@ func (p *viewPanel) composeForward() {
 		Subject:     compose.ForwardSubject(decodedSubject(pm)),
 		Body:        compose.ForwardBlock(i18n.T("fwd.separator"), headers, displayText(pm)),
 		Attachments: atts,
+	})
+}
+
+// composeEditAsNew öffnet eine gesendete Nachricht als NEUE Nachricht im
+// Editiermodus (alle Felder vorbefüllt, neue Message-ID beim Senden) –
+// z. B. um eine verlorene/abgelehnte Mail erneut zu verschicken.
+// Grenze: BCC ist in der Gesendet-Kopie nicht enthalten (nur Envelope).
+func (p *viewPanel) composeEditAsNew() {
+	if p.current == nil || p.raw == nil {
+		return
+	}
+	pm, encrypted, err := p.effectiveParsed()
+	if err != nil {
+		p.u.showError(err)
+		return
+	}
+	if pm.Encrypted && p.decrypted == nil {
+		// Chiffrierte Gesendet-Kopie, noch nicht entschlüsselt: erst der
+		// Entschlüsseln-Fluss, sonst würde der Chiffretext zum Body.
+		dialog.ShowInformation(i18n.T("msg.editasnew"), i18n.T("msg.editasnew.locked"), p.u.win)
+		return
+	}
+	var atts []compose.Attachment
+	for _, a := range pm.Attachments {
+		atts = append(atts, compose.Attachment{
+			Filename: a.Filename, Data: a.Data, MIMEType: a.MediaType,
+		})
+	}
+	p.u.showComposeWindow(nil, &prefill{
+		From:        p.current.From, // eigene Identität, nackt gespeichert
+		To:          decodeAddressList(pm.Header.Get("To")),
+		Cc:          decodeAddressList(pm.Header.Get("Cc")),
+		Subject:     decodedSubject(pm),
+		Body:        displayText(pm),
+		Attachments: atts,
+		Sign:        p.pmOuter != nil && p.pmOuter.Signed,
+		Encrypt:     encrypted,
+		NoSignature: true, // alter Body enthält die Signatur ggf. schon
 	})
 }
 

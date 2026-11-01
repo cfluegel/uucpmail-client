@@ -18,7 +18,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
 )
 
-const Version = "1.1.0"
+const Version = "1.2.0"
 
 // Result fasst einen Sync-Lauf zusammen.
 type Result struct {
@@ -242,11 +242,9 @@ func (e *Engine) execOne(xPath string) error {
 	}
 	e.logf("neue Nachricht für %s (%d Bytes)", strings.Join(rcpts, ", "), len(body))
 	// uuctl-Antworten zusätzlich in den persistierten Dienststatus übernehmen.
+	// Das Server-Limit wird nur angezeigt (Tarif-Reiter) – die weiche
+	// Größenwarnung (ServiceProfile) bleibt die Nutzereinstellung.
 	if kind := parseUUCTLReply(body, &e.Cfg.ServiceStatus, time.Now()); kind != "" {
-		if kind == "quota" && e.Cfg.ServiceStatus.MaxMessageBytes > 0 {
-			// Senke: weiche Größenwarnung dem Server-Limit nachziehen.
-			e.Cfg.ServiceProfile.MaxMessageBytes = e.Cfg.ServiceStatus.MaxMessageBytes
-		}
 		if err := e.Cfg.Save(); err != nil {
 			e.logf("dienststatus speichern: %v", err)
 		} else {

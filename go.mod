@@ -5,9 +5,15 @@ go 1.27.2
 require (
 	fyne.io/fyne/v2 v2.8.2
 	github.com/ProtonMail/go-crypto v1.5.2
+	github.com/go-ctap/ctaphid v0.7.0
+	github.com/go-ctap/winhello v0.1.0
+	github.com/ldclabs/cose v1.3.2
+	github.com/telesma-app/ctap v0.52.0
 	go.etcd.io/bbolt v1.5.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/net v0.60.0
+	golang.org/x/net v0.62.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 )
 
@@ -17,9 +23,12 @@ require (
 	github.com/FyshOS/fancyfs v0.0.1 // indirect
 	github.com/anthonynsimon/bild v0.14.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
-	github.com/cloudflare/circl v1.6.3 // indirect
+	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
+	github.com/ebitengine/purego v0.11.2 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.6 // indirect
 	github.com/fyne-io/gl-js v0.2.1-0.20260315212741-029c47fd27e8 // indirect
 	github.com/fyne-io/glfw-js v0.4.0 // indirect
 	github.com/fyne-io/image v0.1.1 // indirect
@@ -29,6 +38,7 @@ require (
 	github.com/go-text/render v0.2.1 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/hack-pad/go-indexeddb v0.3.2 // indirect
 	github.com/hack-pad/safejs v0.1.0 // indirect
 	github.com/jeandeaual/go-locale v0.0.0-20250612000132-0ef82f21eade // indirect
@@ -41,8 +51,9 @@ require (
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
+	github.com/telesma-app/hid v0.13.0 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/image v0.47.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

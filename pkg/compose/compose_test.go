@@ -173,3 +173,91 @@ func TestEstimatedWireSize(t *testing.T) {
 		t.Errorf("estimate unplausibel: %d", est)
 	}
 }
+
+func TestRFC822AttachmentUnencoded(t *testing.T) {
+	inner := "From: x@example.org\nSubject: Innen\n\nHallo Wörld\n"
+	m := &Message{
+		Identity: "test@uucpmail.de",
+		To:       []string{"a@example.com"},
+		Subject:  "Fwd: 2 Nachrichten",
+		Body:     "siehe Anhang",
+		NodeName: "u7a2f4c",
+		Date:     time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC),
+		Attachments: []Attachment{
+			{Filename: "Innen.eml", Data: []byte(inner), MIMEType: "message/rfc822"},
+			{Filename: "bin.dat", Data: []byte{0, 1, 2}, MIMEType: "application/octet-stream"},
+		},
+	}
+	raw := string(m.Build("test"))
+	if !strings.Contains(raw, "Content-Type: message/rfc822") {
+		t.Fatal("message/rfc822-Part fehlt")
+	}
+	// Die angehängte Mail muss unkodiert (8bit, CRLF) im Part stehen.
+	if !strings.Contains(raw, "Subject: Innen") || !strings.Contains(raw, "Hallo Wörld") {
+		t.Fatal("rfc822-Anhang nicht unkodiert enthalten")
+	}
+	// 8bit muss zweimal vorkommen: Textpart + rfc822-Anhang (MIMEHeader
+	// sortiert Headerzeilen alphabetisch, daher nicht positionsbasiert prüfen).
+	if strings.Count(raw, "Content-Transfer-Encoding: 8bit") != 2 {
+		t.Fatal("rfc822-Anhang nicht als 8bit deklariert")
+	}
+	// Der Binär-Anhang bleibt base64.
+	if !strings.Contains(raw, "Content-Transfer-Encoding: base64") {
+		t.Fatal("base64-Anhang fehlt")
+	}
+}
+
+func TestEnvelopeRecipientsStripDisplayNames(t *testing.T) {
+	m := &Message{
+		Identity: "me@uucpmail.de",
+		// Exakt der Server-Fall aus EXCHANGE 2026-10-31.
+		To: []string{"Andrei Rachita <andrei@rachita.net>", "andrei.rachita@uucpmail.de"},
+		Cc: []string{"=?UTF-8?Q?Artur_Szyma=C5=84ski?= <arthur@skonet.pl>"},
+		// Namensform und nackte Form derselben Adresse → ein Empfänger.
+		Bcc: []string{"Jemand <andrei@rachita.net>"},
+	}
+	got := m.EnvelopeRecipients()
+	want := []string{"andrei@rachita.net", "andrei.rachita@uucpmail.de", "arthur@skonet.pl"}
+	if len(got) != len(want) {
+		t.Fatalf("Empfänger: %v, erwartet %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Empfänger[%d] = %q, erwartet %q (alle: %v)", i, got[i], want[i], got)
+		}
+	}
+	for _, r := range got {
+		if strings.ContainsAny(r, " <>\"") {
+			t.Fatalf("rmail-Argument enthält verbotene Zeichen: %q", r)
+		}
+	}
+}
+
+func TestBuildEncodesDisplayNameHeaders(t *testing.T) {
+	m := &Message{
+		Identity: "me@uucpmail.de",
+		To:       []string{"Artur Szymański <arthur@skonet.pl>"},
+		Subject:  "Test",
+		Body:     "x",
+		NodeName: "u7a2f4c",
+		Date:     time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC),
+	}
+	raw := m.Build("test")
+	parsed, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	toHeader := parsed.Header.Get("To")
+	for _, r := range toHeader {
+		if r > 126 {
+			t.Fatalf("To-Header enthält rohe Nicht-ASCII-Bytes: %q", toHeader)
+		}
+	}
+	addrs, err := mail.ParseAddressList(toHeader)
+	if err != nil || len(addrs) != 1 {
+		t.Fatalf("To-Header nicht parsebar: %q (%v)", toHeader, err)
+	}
+	if addrs[0].Address != "arthur@skonet.pl" || addrs[0].Name != "Artur Szymański" {
+		t.Fatalf("Roundtrip-Verlust: %+v", addrs[0])
+	}
+}

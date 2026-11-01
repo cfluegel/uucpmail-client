@@ -33,6 +33,11 @@ lokal `make cross` (fyne-cross, Docker; macOS nur nativ/CI).
 
 ## Benutzung
 
+**Vollständige Dokumentation** (Oberfläche Schritt für Schritt und alle
+CLI-Kommandos mit Flags und Beispielen): **[docs/HANDBUCH.md](docs/HANDBUCH.md)**.
+Die CLI bietet neben `sync` u. a. `send` (Mail aus stdin), `queue`,
+`keygen [-import]`, `pgp-keygen`, `ctl quota|usage` und `fido2 enroll`.
+
 ```sh
 uucpmail-client            # GUI (Erststart: Schlüssel erzeugen, Pubkey an
                            # beta@uucpmail.de senden, Node/Adresse eintragen)
@@ -47,6 +52,74 @@ Konfiguration/Daten liegen unter dem OS-Konfigurationsverzeichnis
 `~/.config/uucpmail`): `config.json`, Schlüssel, `known_hosts` (TOFU),
 Mail-Store (`mail/`, eine `.eml` pro Nachricht + bbolt-Index) und
 UUCP-Spool (`spool/`).
+
+## FIDO2-Security-Key für SSH
+
+Der SSH-Transportschlüssel kann auf einem FIDO2-Security-Key (Yubikey,
+Nitrokey 3, SoloKeys u. a., FIDO2-PIN erforderlich) als residenter
+Schlüssel liegen – der private Schlüssel verlässt das Token nie. Einrichtung
+über Einstellungen → SSH → „FIDO2 SSH Key nutzen" (geführter Dialog:
+vorhandenen Schlüssel übernehmen oder neu erzeugen) oder per CLI:
+
+```
+uucpmail-client fido2 enroll -new   # residenten Schlüssel erzeugen
+uucpmail-client fido2 list          # Schlüssel auf dem Token anzeigen
+```
+
+Den angezeigten Public Key (`sk-ssh-ed25519@…`) beim Dienst als
+Node-Schlüssel registrieren. Jede Verbindung fragt die PIN ab (bewusst ohne
+Zwischenspeicherung) und verlangt eine Berührung des Tokens. Der lokale
+Stub (`fido2_key.json`) enthält kein Schlüsselmaterial und wandert im
+portablen Modus mit – zusammen mit Token + PIN + Node-ID reicht das für die
+Einrichtung an einem fremden Rechner. Für die OpenSSH-CLI lässt sich der
+Schlüssel jederzeit mit `ssh-keygen -K` regenerieren. Der bisherige
+Datei-Schlüssel bleibt als Rückfalloption erhalten (Haken abwählen).
+Windows: Einrichtung/Signieren laufen über die System-UI (WebAuthn);
+vorhandene Token-Schlüssel lassen sich dort nicht auflisten – auf
+macOS/Linux einrichten und den portablen Stub mitnehmen. Der
+Windows-Zweig ist noch nicht live getestet.
+
+## Portabler Modus
+
+Liegt neben dem Client-Programm ein Ordner `uucpmail-data`, speichert der
+Client alle Daten dort (Konfiguration, Schlüssel, Mail-Store, Spool,
+Fensterzustand) – ideal für einen USB-Stick, der Gastrechner bleibt sauber.
+Ohne diesen Ordner gilt wie bisher das Benutzer-Konfigurationsverzeichnis.
+
+Einrichtung: Ordner `uucpmail-data` neben dem Binary anlegen (beim nächsten
+Start erscheint der Einrichtungs-Assistent) – oder in den Einstellungen
+unter „Sicherung" den Knopf „Portablen Datenordner erstellen…" nutzen, der
+die bestehende Identität (Konfiguration, Schlüssel, Adressbuch – ohne
+Mails) in einen neuen Datenordner kopiert.
+
+Hinweise: Auf einem fremden Rechner muss der Server-Hostkey beim ersten
+Sync einmal bestätigt werden (TOFU). Auf FAT-formatierten Sticks sind
+Unix-Dateirechte wirkungslos – den Stick entsprechend schützen.
+
+## Tastaturbedienung
+
+Der Client ist tastaturzentriert bedienbar. `Tab` wechselt zwischen Mailliste
+und Mailtext (der aktive Bereich ist farblich umrandet); andere Elemente sind
+bewusst nicht per Tab erreichbar.
+
+| Taste | Funktion |
+|---|---|
+| `S` (oder `Cmd/Ctrl+S`) | Synchronisieren |
+| `N` | Neue Nachricht |
+| `R` / `Shift+R` | Antworten / Allen antworten |
+| `F` | Weiterleiten (bei Mehrfachauswahl: als .eml-Anhänge) |
+| `U` | Als ungelesen markieren (nur Posteingang) |
+| `Entf`/`Backspace` | Löschen (in den Papierkorb; dort endgültig) |
+| `↑`/`↓` | Liste: Cursor bewegen · Mailtext: zeilenweise scrollen |
+| `Shift+↑`/`↓` | Liste: Auswahl erweitern · Mailtext: Sprung (einstellbar) |
+| `Cmd/Ctrl+,` | Einstellungen öffnen |
+
+Im Ordner Gesendet öffnet „Erneut bearbeiten" eine verschickte Mail als
+neue, vollständig vorbefüllte Nachricht (BCC ist in der Gesendet-Kopie
+nicht enthalten). Gelöschte Mails wandern in den Papierkorb (Ordner rechts neben Gesendet) und
+können dort wiederhergestellt werden. Der Papierkorb wird beim Programmstart
+automatisch geleert, wenn Nachrichten älter sind als der eingestellte Wert
+(Einstellungen → Allgemein, 0 = nie).
 
 ## Tests gegen den Server-Dev-Stack
 
@@ -136,9 +209,6 @@ Spam) passiert serverseitig erst nach der Übertragung. Stand heute gilt:
   MAILER-DAEMON@uucpmail.de beim nächsten Sync als normale Mail an.
 - Übertragungsfehler während der UUCP-Session (Ablehnung, Abbruch) sind
   sofort sichtbar: Die Mail bleibt mit ⚠ und Fehlertext im Postausgang.
-
-Erkenntnisse und Fragen Richtung Serverentwicklung werden in
-[../EXCHANGE.md](../EXCHANGE.md) ausgetauscht.
 
 ## Lizenz
 

@@ -21,9 +21,10 @@ const (
 	Drafts = "Drafts"
 	Outbox = "Outbox"
 	Sent   = "Sent"
+	Trash  = "Trash"
 )
 
-var Folders = []string{Inbox, Drafts, Outbox, Sent}
+var Folders = []string{Inbox, Drafts, Outbox, Sent, Trash}
 
 // Meta sind die indexierten Eigenschaften einer Nachricht.
 type Meta struct {
@@ -38,7 +39,9 @@ type Meta struct {
 	Size         int64     `json:"size"`
 	EnvelopeFrom string    `json:"envelope_from,omitempty"`
 	HasAttach    bool      `json:"has_attachments,omitempty"`
-	LastError    string    `json:"last_error,omitempty"` // z.B. SN-Ablehnung (Outbox)
+	LastError    string    `json:"last_error,omitempty"`  // z.B. SN-Ablehnung (Outbox)
+	OrigFolder   string    `json:"orig_folder,omitempty"` // Herkunft (nur im Papierkorb)
+	DeletedAt    time.Time `json:"deleted_at,omitempty"`  // Löschzeitpunkt (nur im Papierkorb)
 }
 
 type Store struct {
@@ -295,21 +298,87 @@ func (s *Store) Move(fromFolder, id, toFolder string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Rename(s.path(fromFolder, id), s.path(toFolder, id)); err != nil {
-		return err
-	}
 	meta.Folder = toFolder
 	meta.LastError = ""
+	return s.moveMeta(fromFolder, meta)
+}
+
+// moveMeta verschiebt Datei und Indexeintrag gemäß meta.Folder (bereits gesetzt).
+func (s *Store) moveMeta(fromFolder string, meta *Meta) error {
+	if err := os.Rename(s.path(fromFolder, meta.ID), s.path(meta.Folder, meta.ID)); err != nil {
+		return err
+	}
 	return s.db.Update(func(tx *bolt.Tx) error {
-		if err := tx.Bucket([]byte(fromFolder)).Delete([]byte(id)); err != nil {
+		if err := tx.Bucket([]byte(fromFolder)).Delete([]byte(meta.ID)); err != nil {
 			return err
 		}
 		enc, err := json.Marshal(meta)
 		if err != nil {
 			return err
 		}
-		return tx.Bucket([]byte(toFolder)).Put([]byte(id), enc)
+		return tx.Bucket([]byte(meta.Folder)).Put([]byte(meta.ID), enc)
 	})
+}
+
+// MoveToTrash verschiebt eine Nachricht in den Papierkorb und merkt sich
+// Herkunftsordner und Löschzeitpunkt.
+func (s *Store) MoveToTrash(folder, id string) error {
+	if folder == Trash {
+		return fmt.Errorf("nachricht %s ist bereits im Papierkorb", id)
+	}
+	meta, err := s.Get(folder, id)
+	if err != nil {
+		return err
+	}
+	meta.Folder = Trash
+	meta.OrigFolder = folder
+	meta.DeletedAt = time.Now()
+	return s.moveMeta(folder, meta)
+}
+
+// RestoreFromTrash verschiebt eine Papierkorb-Nachricht zurück in ihren
+// Herkunftsordner (Fallback: Posteingang).
+func (s *Store) RestoreFromTrash(id string) error {
+	meta, err := s.Get(Trash, id)
+	if err != nil {
+		return err
+	}
+	dest := meta.OrigFolder
+	if dest == "" {
+		dest = Inbox
+	}
+	meta.Folder = dest
+	meta.OrigFolder = ""
+	meta.DeletedAt = time.Time{}
+	return s.moveMeta(Trash, meta)
+}
+
+// PurgeTrash löscht Papierkorb-Nachrichten endgültig, deren Löschzeitpunkt
+// älter als olderThan ist. Einträge ohne Löschzeitpunkt (z.B. per reconcile
+// importierte Dateien) werden einmalig gestempelt statt gelöscht.
+func (s *Store) PurgeTrash(olderThan time.Duration) (int, error) {
+	metas, err := s.List(Trash)
+	if err != nil {
+		return 0, err
+	}
+	cutoff := time.Now().Add(-olderThan)
+	n := 0
+	for _, m := range metas {
+		if m.DeletedAt.IsZero() {
+			m.DeletedAt = time.Now()
+			if err := s.putMeta(m); err != nil {
+				return n, err
+			}
+			continue
+		}
+		if m.DeletedAt.Before(cutoff) {
+			if err := s.Delete(Trash, m.ID); err != nil {
+				return n, err
+			}
+			n++
+		}
+	}
+	return n, nil
 }
 
 // Delete entfernt eine Nachricht endgültig.

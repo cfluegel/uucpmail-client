@@ -5,6 +5,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/mail"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/compose"
 	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
+	"github.com/cfluegel/uucpmail-client/pkg/pgp"
 	"github.com/cfluegel/uucpmail-client/pkg/store"
 )
 
@@ -32,6 +34,7 @@ type prefill struct {
 	Sign        bool
 	Encrypt     bool
 	FocusBody   bool
+	NoSignature bool // Body enthält die Signatur ggf. schon (Erneut bearbeiten)
 }
 
 // showCompose öffnet das Fenster für eine neue Nachricht.
@@ -87,11 +90,16 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	ccEntry.SetPlaceHolder(i18n.T("compose.cc"))
 	bccEntry := widget.NewEntry()
 	bccEntry.SetPlaceHolder(i18n.T("compose.bcc"))
-	subjectEntry := widget.NewEntry()
+	subjectEntry := newTabJumpEntry()
 	subjectEntry.SetPlaceHolder(i18n.T("compose.subject"))
-	body := widget.NewMultiLineEntry()
+	body := newTabBackEntry()
 	body.Wrapping = fyne.TextWrapWord
 	body.TextStyle.Monospace = true
+	// Tab nach dem Betreff springt direkt in den Nachrichtentext und
+	// überspringt die Formatierungs-/PGP-Knöpfe; Shift+Tab führt aus dem
+	// Body zurück zum Betreff.
+	subjectEntry.canvas, subjectEntry.next = win.Canvas(), body
+	body.canvas, body.prev = win.Canvas(), subjectEntry
 
 	// BCC ist eingeklappt, bis es gebraucht wird.
 	bccRow := container.NewStack(bccEntry)
@@ -123,6 +131,12 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	}
 	signBtn.OnTapped = func() { signOn = !signOn; setToggle(signBtn, signOn) }
 	encryptBtn.OnTapped = func() { encryptOn = !encryptOn; setToggle(encryptBtn, encryptOn) }
+	// Eigenen öffentlichen Schlüssel anhängen (unabhängig von Signieren/
+	// Verschlüsseln). Aufgelöst wird erst beim Senden – die From-Identität
+	// kann bis dahin noch wechseln.
+	attachKeyOn := false
+	attachKeyBtn := widget.NewButton(i18n.T("compose.pgp.attachkey"), nil)
+	attachKeyBtn.OnTapped = func() { attachKeyOn = !attachKeyOn; setToggle(attachKeyBtn, attachKeyOn) }
 
 	// Anhänge + Größenwarnung.
 	var attachments []compose.Attachment
@@ -220,6 +234,20 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 		refreshAttachList()
 		updateSizeWarn()
 	}
+	// Standard-Signatur einfügen – nie bei Entwürfen (steht dort ggf. schon),
+	// bei Antworten/Weiterleitungen nur mit entsprechender Option; Cursor
+	// bleibt am Anfang (über Signatur bzw. Zitat).
+	if draft == nil && u.cfg.SignatureOn && (pf == nil || !pf.NoSignature) {
+		if block := compose.SignatureBlock(u.cfg.SignatureText); block != "" {
+			if pf == nil {
+				body.SetText(block)
+				moveCursor(&body.Entry, 0)
+			} else if u.cfg.SignatureReply {
+				body.SetText(block + pf.Body)
+				moveCursor(&body.Entry, 0)
+			}
+		}
+	}
 	toEntry.OnChanged = markDirty
 	ccEntry.OnChanged = markDirty
 	bccEntry.OnChanged = markDirty
@@ -282,18 +310,49 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	for _, sn := range compose.MarkdownSnippets {
 		sn := sn
 		mdButtons = append(mdButtons, widget.NewButton(i18n.T(sn.LabelKey), func() {
-			text, cursor := insertAtCursor(body, sn)
+			text, cursor := insertAtCursor(&body.Entry, sn)
 			body.SetText(text)
-			moveCursor(body, cursor)
+			moveCursor(&body.Entry, cursor)
 			win.Canvas().Focus(body)
 		}))
 	}
 	if len(u.keyring.ListPrivate()) > 0 {
-		mdButtons = append(mdButtons, widget.NewSeparator(), signBtn, encryptBtn)
+		mdButtons = append(mdButtons, widget.NewSeparator(), signBtn, encryptBtn, attachKeyBtn)
+	}
+
+	// ownKeyAttachment exportiert den öffentlichen Schlüssel der gewählten
+	// From-Identität als application/pgp-keys-Anhang (Thunderbird-Konvention).
+	ownKeyAttachment := func() (*compose.Attachment, error) {
+		ent := u.keyring.FindPrivateByEmail(fromSelect.Selected)
+		if ent == nil {
+			return nil, fmt.Errorf(i18n.T("compose.pgp.attachkey.nokey"), fromSelect.Selected)
+		}
+		fpr := pgp.FingerprintOf(ent)
+		armored, err := u.keyring.ExportPublic(fpr)
+		if err != nil {
+			return nil, err
+		}
+		keyID := fpr
+		if len(keyID) > 16 {
+			keyID = keyID[len(keyID)-16:]
+		}
+		return &compose.Attachment{
+			Filename: "OpenPGP_0x" + strings.ToUpper(keyID) + ".asc",
+			Data:     armored,
+			MIMEType: "application/pgp-keys",
+		}, nil
 	}
 
 	doEnqueue := func() {
 		msg := buildMessage()
+		if attachKeyOn {
+			att, err := ownKeyAttachment()
+			if err != nil {
+				dialog.ShowError(err, win)
+				return
+			}
+			msg.Attachments = append(msg.Attachments, *att)
+		}
 		if _, err := u.engine.Enqueue(msg); err != nil {
 			u.showError(err)
 			return
@@ -351,7 +410,7 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	win.SetContent(container.NewBorder(form, bottom, nil, nil, body))
 	if pf != nil && pf.FocusBody {
 		win.Canvas().Focus(body)
-		moveCursor(body, 0)
+		moveCursor(&body.Entry, 0)
 	} else {
 		win.Canvas().Focus(toEntry)
 	}
@@ -448,6 +507,20 @@ func moveCursor(e *widget.Entry, offset int) {
 }
 
 func splitRecipients(s string) []string {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	// Bevorzugt als Adressliste parsen – überlebt Kommas in quoted
+	// Anzeigenamen (`"Nachname, Vorname" <a@b>`) und dekodiert RFC 2047.
+	if addrs, err := mail.ParseAddressList(s); err == nil {
+		var out []string
+		for _, a := range addrs {
+			out = append(out, displayAddress(a))
+		}
+		return out
+	}
+	// Fallback für unfertige/ungültige Eingaben: simples Splitting
+	// (Validate lehnt ungültige Empfänger beim Senden ab).
 	var out []string
 	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' }) {
 		if p := strings.TrimSpace(part); p != "" {
@@ -455,4 +528,19 @@ func splitRecipients(s string) []string {
 		}
 	}
 	return out
+}
+
+// displayAddress liefert die menschenlesbare Form für Eingabefelder:
+// dekodierter Anzeigename + <adresse> bzw. die nackte Adresse.
+func displayAddress(a *mail.Address) string {
+	if a.Name == "" {
+		return a.Address
+	}
+	return a.Name + " <" + a.Address + ">"
+}
+
+// decodeAddressList macht einen To/Cc/From-Header für Eingabefelder lesbar
+// (RFC 2047 dekodiert); bei Parse-Fehlern bleibt der Header unverändert.
+func decodeAddressList(header string) string {
+	return strings.Join(splitRecipients(header), ", ")
 }

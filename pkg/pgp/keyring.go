@@ -9,6 +9,7 @@ import (
 	"crypto"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -117,7 +118,13 @@ func genConfig(lifetime time.Duration) *packet.Config {
 		DefaultHash: crypto.SHA256,
 	}
 	if lifetime > 0 {
-		cfg.KeyLifetimeSecs = uint32(lifetime / time.Second)
+		secs := int64(lifetime / time.Second)
+		// Clamp statt uint32-Wrap (ab ~136 Jahren käme sonst ein absurd
+		// kurzes/falsches Ablaufdatum heraus).
+		if secs > math.MaxUint32 {
+			secs = math.MaxUint32
+		}
+		cfg.KeyLifetimeSecs = uint32(secs)
 	}
 	return cfg
 }

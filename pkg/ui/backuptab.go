@@ -2,7 +2,10 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -31,11 +34,65 @@ func (u *UI) buildBackupTab(win fyne.Window) fyne.CanvasObject {
 	})
 	importBtn.Importance = widget.DangerImportance
 
+	portableHint := widget.NewLabel(i18n.T("backup.portable.hint"))
+	portableHint.Wrapping = fyne.TextWrapWord
+	portableBtn := widget.NewButton(i18n.T("backup.portable.create"), func() {
+		u.portableCreateFlow(win)
+	})
+
 	return container.NewVScroll(container.NewVBox(
 		createHint, createBtn,
 		widget.NewSeparator(),
+		portableHint, portableBtn,
+		widget.NewSeparator(),
 		importHint, importBtn,
 	))
+}
+
+// portableCreateFlow: Zielordner wählen → dort uucpmail-data anlegen und die
+// Identitätsdateien (backup.Files-Whitelist + ui_state.json) hineinkopieren.
+// Mail-Store und Spool werden bewusst nicht kopiert (frischer Stand).
+func (u *UI) portableCreateFlow(win fyne.Window) {
+	fd := dialog.NewFolderOpen(func(lu fyne.ListableURI, err error) {
+		if err != nil || lu == nil {
+			return
+		}
+		target := filepath.Join(lu.Path(), config.PortableDirName)
+		if _, err := os.Stat(target); err == nil {
+			u.showError(fmt.Errorf(i18n.T("backup.portable.exists"), target))
+			return
+		}
+		if err := os.MkdirAll(target, 0o700); err != nil {
+			u.showError(err)
+			return
+		}
+		srcDir, err := config.Dir()
+		if err != nil {
+			u.showError(err)
+			return
+		}
+		for _, name := range append(append([]string{}, backup.Files...), "ui_state.json") {
+			if err := copyFileIfExists(filepath.Join(srcDir, name), filepath.Join(target, name)); err != nil {
+				u.showError(err)
+				return
+			}
+		}
+		dialog.ShowInformation(i18n.T("backup.portable.create"),
+			fmt.Sprintf(i18n.T("backup.portable.done"), target), win)
+	}, win)
+	fd.Show()
+}
+
+// copyFileIfExists kopiert eine Datei (0600); fehlende Quellen sind kein Fehler.
+func copyFileIfExists(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o600)
 }
 
 // backupCreateFlow: Passphrase (2×) → Datei speichern.

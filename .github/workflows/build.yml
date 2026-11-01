@@ -26,6 +26,12 @@ jobs:
       - run: go test ./...
       - name: Schwachstellen-Scan (govulncheck)
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Statische Sicherheitsanalyse (gosec)
+        # Ausgeschlossen (Desktop-Client, siehe docs/SECURITY-AUDIT.md):
+        # G304/G703 – alle Pfade stammen aus config.Dir() bzw. Nutzer-
+        # Dateidialogen, keine fremde Eingabe; G104 – LOW, unbehandelte
+        # Fehler an unkritischen Stellen (Log/UI-Refresh).
+        run: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104,G304,G703 ./...
 
   release:
     # Läuft nur für Versions-Tags; baut alle Plattformen und hängt die

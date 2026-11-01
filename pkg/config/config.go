@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,11 +43,17 @@ type Config struct {
 	ServerPort      int            `json:"server_port"`
 	Identities      []string       `json:"identities"`
 	DefaultIdentity string         `json:"default_identity"`
-	Language        string         `json:"language"`           // "de", "en" oder "" (= OS-Locale)
-	Theme           string         `json:"theme"`              // "", "light", "dark" ("" = System)
-	UIScale         float64        `json:"ui_scale"`           // Schriftgrößen-Faktor, 0/1 = 100 %
-	DraftAutosave   int            `json:"draft_autosave_min"` // Minuten, 0 = Default (10)
-	PGPCacheMin     int            `json:"pgp_cache_min"`      // Minuten, 0 = immer fragen
+	Language        string         `json:"language"`             // "de", "en" oder "" (= OS-Locale)
+	Theme           string         `json:"theme"`                // "", "light", "dark" ("" = System)
+	UIScale         float64        `json:"ui_scale"`             // Schriftgrößen-Faktor, 0/1 = 100 %
+	DraftAutosave   int            `json:"draft_autosave_min"`   // Minuten, 0 = Default (10)
+	PGPCacheMin     int            `json:"pgp_cache_min"`        // Minuten, 0 = immer fragen
+	TrashDays       int            `json:"trash_retention_days"` // Papierkorb-Aufbewahrung in Tagen, 0 = nie leeren
+	ScrollLines     int            `json:"scroll_lines"`         // Shift+Cursor-Sprungweite im Mailtext (Zeilen)
+	SignatureOn     bool           `json:"signature_enabled"`    // Standard-Signatur in neue Mails einfügen
+	SignatureReply  bool           `json:"signature_on_reply"`   // … auch bei Antworten/Weiterleitungen
+	SignatureText   string         `json:"signature_text"`
+	SSHKeyMode      string         `json:"ssh_key_mode,omitempty"` // "", "file" = Datei-Schlüssel; "fido2" = Security-Key
 	ServiceProfile  ServiceProfile `json:"service_profile"`
 	ServiceStatus   ServiceStatus  `json:"service_status,omitempty"`
 }
@@ -58,24 +65,77 @@ func Default() *Config {
 		ServerPort:    22,
 		DraftAutosave: 10,
 		PGPCacheMin:   15,
+		TrashDays:     30,
+		ScrollLines:   10,
 		ServiceProfile: ServiceProfile{
-			MaxMessageBytes: 10 * 1024 * 1024,
+			MaxMessageBytes: 5 * 1024 * 1024,
 			WarnMsgsPerHour: 100,
 		},
 	}
 }
 
-// Dir liefert das Konfigurations-/Datenverzeichnis und legt es bei Bedarf an.
-func Dir() (string, error) {
+// PortableDirName: liegt ein Ordner dieses Namens neben dem Binary, läuft
+// der Client portabel – alle Daten bleiben dort (USB-Stick-Szenario).
+const PortableDirName = "uucpmail-data"
+
+// executableDir ist als Variable testbar (os.Executable im Test unbrauchbar).
+var executableDir = func() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return filepath.Dir(exe), nil
+}
+
+var (
+	dirOnce     sync.Once
+	resolvedDir string
+	portable    bool
+)
+
+// resolveDir ermittelt das Datenverzeichnis einmalig: portabler Ordner
+// neben dem Binary hat Vorrang, sonst os.UserConfigDir()/uucpmail.
+func resolveDir() (string, error) {
+	if exeDir, err := executableDir(); err == nil {
+		p := filepath.Join(exeDir, PortableDirName)
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			portable = true
+			return p, nil
+		}
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, "uucpmail")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	return filepath.Join(base, "uucpmail"), nil
+}
+
+// Dir liefert das Konfigurations-/Datenverzeichnis und legt es bei Bedarf an.
+func Dir() (string, error) {
+	var onceErr error
+	dirOnce.Do(func() {
+		resolvedDir, onceErr = resolveDir()
+	})
+	if onceErr != nil {
+		return "", onceErr
+	}
+	if resolvedDir == "" {
+		return "", errors.New("datenverzeichnis nicht ermittelbar")
+	}
+	// MkdirAll-Modi sind auf FAT-Medien wirkungslos – unkritisch.
+	if err := os.MkdirAll(resolvedDir, 0o700); err != nil {
 		return "", err
 	}
-	return dir, nil
+	return resolvedDir, nil
+}
+
+// IsPortable meldet, ob der portable Datenordner neben dem Binary aktiv ist.
+func IsPortable() bool {
+	_, _ = Dir()
+	return portable
 }
 
 func Path() (string, error) {
@@ -92,6 +152,15 @@ func KeyPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "id_ed25519"), nil
+}
+
+// FIDO2StubPath: Stub des FIDO2-SSH-Schlüssels (Public Key + Credential-ID).
+func FIDO2StubPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "fido2_key.json"), nil
 }
 
 func KnownHostsPath() (string, error) {

@@ -398,3 +398,37 @@ func TestEnqueueControlSendsUuctlJob(t *testing.T) {
 		t.Error("spool nicht leer")
 	}
 }
+
+// TestEnqueueStripsDisplayNamesFromRmail deckt den Server-Befund aus
+// EXCHANGE 2026-10-31 ab: Anzeigenamen/MIME-kodierte Namen dürfen nie in
+// die rmail-Argumentliste gelangen (uux trennt an Leerzeichen).
+func TestEnqueueStripsDisplayNamesFromRmail(t *testing.T) {
+	e := newEngine(t)
+	msg := testMessage()
+	msg.To = []string{"Andrei Rachita <andrei@rachita.net>", "andrei.rachita@uucpmail.de"}
+	msg.Cc = []string{"=?UTF-8?Q?Artur_Szyma=C5=84ski?= <arthur@skonet.pl>"}
+	if _, err := e.Enqueue(msg); err != nil {
+		t.Fatal(err)
+	}
+	srv := &fakeserver.Server{WantCaller: "u7a2f4c"}
+	if _, err, serr := run(t, e, srv); err != nil || serr != nil {
+		t.Fatalf("client err=%v server err=%v", err, serr)
+	}
+	x, err := uucp.ParseXFile(string(srv.Received[1].Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rcpts, err := x.RmailRecipients()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"andrei@rachita.net", "andrei.rachita@uucpmail.de", "arthur@skonet.pl"}
+	if len(rcpts) != len(want) {
+		t.Fatalf("rmail-argv: %v, erwartet %v", rcpts, want)
+	}
+	for i := range want {
+		if rcpts[i] != want[i] {
+			t.Fatalf("rmail-argv[%d] = %q, erwartet %q", i, rcpts[i], want[i])
+		}
+	}
+}

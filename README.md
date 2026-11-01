@@ -100,6 +100,11 @@ locally via `make cross` (fyne-cross, Docker; macOS builds natively/CI only).
 
 ## Usage
 
+**Full documentation** (GUI walkthrough and every CLI command with flags
+and examples): **[docs/MANUAL.md](docs/MANUAL.md)**. Besides `sync`, the
+CLI offers `send` (mail from stdin), `queue`, `keygen [-import]`,
+`pgp-keygen`, `ctl quota|usage` and `fido2 enroll`.
+
 ```sh
 uucpmail-client            # GUI (first run: generate key, register the
                            # public key with the operator, enter node/address)
@@ -114,6 +119,68 @@ Configuration and data live in the OS config directory
 (`~/Library/Application Support/uucpmail`, `%AppData%\uucpmail`,
 `~/.config/uucpmail`): `config.json`, keys, `known_hosts` (TOFU), the mail
 store (one `.eml` per message + a rebuildable index) and the UUCP spool.
+
+## FIDO2 security key for SSH
+
+The SSH transport key can live on a FIDO2 security key (Yubikey, Nitrokey 3,
+SoloKeys etc., FIDO2 PIN required) as a resident key – the private key never
+leaves the token. Set it up via Settings → SSH → "Use FIDO2 SSH key"
+(guided dialog: adopt an existing key or create a new one) or via CLI:
+
+```
+uucpmail-client fido2 enroll -new   # create a resident key
+uucpmail-client fido2 list          # show keys on the token
+```
+
+Register the printed public key (`sk-ssh-ed25519@…`) as a node key with the
+service. Every connection asks for the PIN (deliberately never cached) and
+requires a token touch. The local stub (`fido2_key.json`) contains no key
+material and travels in portable mode – token + PIN + node ID are all you
+need on a foreign machine. For the OpenSSH CLI the key can be regenerated
+anytime with `ssh-keygen -K`. The previous file key remains as a fallback
+(uncheck the box). Windows: enrollment/signing go through the system UI
+(WebAuthn); existing token keys cannot be listed there – enroll on
+macOS/Linux and carry the portable stub. The Windows path is not yet
+live-tested.
+
+## Portable mode
+
+If a folder named `uucpmail-data` sits next to the client binary, the
+client stores all data there (configuration, keys, mail store, spool,
+window state) – ideal for a USB stick; the guest machine stays clean.
+Without that folder the user configuration directory is used as before.
+
+Setup: create a `uucpmail-data` folder next to the binary (the first-run
+wizard appears on next start) – or use Settings → Backup →
+"Create portable data folder…", which copies your existing identity
+(configuration, keys, address book – no mails) into a new data folder.
+
+Notes: on a foreign machine the server host key must be confirmed once on
+first sync (TOFU). On FAT-formatted sticks Unix file permissions have no
+effect – protect the stick accordingly.
+
+## Keyboard controls
+
+The client is fully keyboard-driven. `Tab` toggles between the message list
+and the mail text (the active area gets a colored outline); other elements are
+deliberately not reachable via Tab.
+
+| Key | Function |
+|---|---|
+| `S` (or `Cmd/Ctrl+S`) | Synchronise |
+| `N` | New message |
+| `R` / `Shift+R` | Reply / Reply all |
+| `F` | Forward (multi-selection: as .eml attachments) |
+| `U` | Mark unread (inbox only) |
+| `Del`/`Backspace` | Delete (to trash; permanent inside trash) |
+| `↑`/`↓` | List: move cursor · mail text: scroll line by line |
+| `Shift+↑`/`↓` | List: extend selection · mail text: jump (configurable) |
+| `Cmd/Ctrl+,` | Open settings |
+
+In the Sent folder, "Edit as new" opens a sent mail as a new, fully
+prefilled message (BCC is not part of the sent copy). Deleted mails move to the Trash folder (right of Sent) where they can be
+restored. The trash is purged automatically at startup once messages are older
+than the configured value (Settings → General, 0 = never).
 
 ## Limits of store-and-forward
 

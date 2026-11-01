@@ -26,6 +26,8 @@ func main() {
 		err = cmdQueue(os.Args[2:])
 	case "ctl":
 		err = cmdCtl(os.Args[2:])
+	case "fido2":
+		err = cmdFIDO2(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -50,5 +52,9 @@ Aufruf:
   uucpmail-client sync            UUCP-Session fahren (senden + abholen)
   uucpmail-client queue           Outbox/Spool-Status anzeigen
   uucpmail-client ctl quota|usage Dienststatus abfragen (Antwort per Mail)
+  uucpmail-client fido2 list|enroll [-new]  FIDO2-Security-Key einrichten
+
+Portabler Modus: Liegt ein Ordner "uucpmail-data" neben dem Programm,
+werden alle Daten dort gespeichert (z. B. USB-Stick).
 `)
 }

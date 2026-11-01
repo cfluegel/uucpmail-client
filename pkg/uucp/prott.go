@@ -57,8 +57,12 @@ func (w *Wire) SendFile(r io.Reader) (int64, error) {
 	hdr := make([]byte, 4)
 	for {
 		n, err := r.Read(buf)
+		if n > len(buf) {
+			// Invariante des io.Reader-Vertrags; schützt die uint32-Konvertierung.
+			return total, fmt.Errorf("protokoll t: Reader lieferte %d > %d Bytes", n, len(buf))
+		}
 		if n > 0 {
-			binary.BigEndian.PutUint32(hdr, uint32(n))
+			binary.BigEndian.PutUint32(hdr, uint32(n)) // #nosec G115 -- n oben gegen len(buf)=512 geprüft
 			if _, werr := w.W.Write(hdr); werr != nil {
 				return total, werr
 			}

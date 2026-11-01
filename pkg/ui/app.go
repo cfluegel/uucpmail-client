@@ -4,6 +4,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -32,6 +33,10 @@ type UI struct {
 	messageList   *messagePanel
 	messageView   *viewPanel
 	statusBar     *statusPanel
+	listZone      *focusZone
+	contentZone   *focusZone
+	activeZone    zoneID
+	state         *uiState
 	log           sessionLog
 	keyring       *pgp.Keyring
 	pgpCache      *pgp.Cache
@@ -78,6 +83,14 @@ func Run() error {
 		spool:         spool,
 		currentFolder: store.Inbox,
 	}
+	// Papierkorb-Aufräumung beim Start (0 = nie automatisch leeren).
+	if cfg.TrashDays > 0 {
+		if n, err := st.PurgeTrash(time.Duration(cfg.TrashDays) * 24 * time.Hour); err != nil {
+			fmt.Fprintln(os.Stderr, "papierkorb aufräumen:", err)
+		} else if n > 0 {
+			u.log.append(fmt.Sprintf(i18n.T("trash.purged"), n, cfg.TrashDays))
+		}
+	}
 	pubPath, err := config.PubringPath()
 	if err != nil {
 		return err
@@ -105,8 +118,10 @@ func Run() error {
 	u.engine = &syncengine.Engine{Cfg: cfg, Store: st, Spool: spool,
 		PGP: &pgp.MailSealer{Keyring: keyring, Cache: u.pgpCache}}
 	u.applyTheme()
+	u.state = loadUIState(u.app.Preferences())
 	u.win = u.app.NewWindow(i18n.T("app.title"))
 	u.buildMainWindow()
+	u.installSignerSource()
 
 	if !cfg.Complete() {
 		u.showSettings(true)

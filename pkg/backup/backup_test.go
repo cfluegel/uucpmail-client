@@ -18,7 +18,9 @@ func TestCreateRestoreRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(data, []byte("PRIVATEKEY")) || bytes.Contains(data, []byte("u1")) {
+	// Nur hinreichend lange Marker prüfen – kurze Strings wie "u1" tauchen
+	// mit ~1 % Wahrscheinlichkeit zufällig im Chiffrat auf (flaky).
+	if bytes.Contains(data, []byte("PRIVATEKEY")) || bytes.Contains(data, []byte(`"node_name"`)) {
 		t.Fatal("klartext im Backup sichtbar")
 	}
 

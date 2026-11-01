@@ -52,6 +52,17 @@ func cmdKeygen(args []string) error {
 }
 
 func requireConfig() (*config.Config, error) {
+	cfg, err := loadConfigChecked()
+	if err != nil {
+		return nil, err
+	}
+	if err := installSignerSource(cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func loadConfigChecked() (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, err
@@ -256,6 +267,9 @@ func cmdPGPKeygen(args []string) error {
 	keyring, err := pgp.LoadKeyring(pubPath, secPath)
 	if err != nil {
 		return err
+	}
+	if *years < 0 || *years > 100 {
+		return errors.New("-years muss zwischen 0 und 100 liegen")
 	}
 	lifetime := time.Duration(*years) * 365 * 24 * time.Hour
 	info, err := keyring.Generate(*name, emails, *pass, lifetime)

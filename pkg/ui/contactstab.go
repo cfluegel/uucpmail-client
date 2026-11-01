@@ -183,6 +183,32 @@ func (u *UI) showContactEditDialogPrefilled(win fyne.Window, existing *contacts.
 		removeKeyBtn.Hide()
 	}
 
+	// Alternativ zum Einfügen: vorhandenen Schlüssel aus dem Schlüsselbund
+	// wählen (fremde und eigene). Das Einfügefeld hat beim Speichern Vorrang.
+	keyInfos := append(u.keyring.ListPublic(), u.keyring.ListPrivate()...)
+	var keyLabels []string
+	for _, info := range keyInfos {
+		keyID := info.Fingerprint
+		if len(keyID) > 16 {
+			keyID = keyID[len(keyID)-16:]
+		}
+		keyLabels = append(keyLabels, fmt.Sprintf("%s <%s> – 0x%s", info.Name, info.Email, keyID))
+	}
+	keyPick := widget.NewSelect(keyLabels, func(sel string) {
+		for i, l := range keyLabels {
+			if l == sel {
+				keyFpr = keyInfos[i].Fingerprint
+				removeKeyBtn.Show()
+				updateKeyStatus()
+				return
+			}
+		}
+	})
+	keyPick.PlaceHolder = i18n.T("contacts.key.pick")
+	if len(keyInfos) == 0 {
+		keyPick.Hide()
+	}
+
 	rows := []fyne.CanvasObject{}
 	if errText != "" {
 		errLabel := widget.NewLabel(errText)
@@ -195,7 +221,7 @@ func (u *UI) showContactEditDialogPrefilled(win fyne.Window, existing *contacts.
 		widget.NewFormItem(i18n.T("contacts.last"), lastEntry),
 		widget.NewFormItem(i18n.T("contacts.email"), emailEntry),
 	)
-	rows = append(rows, form, widget.NewSeparator(), keyStatus, keyPaste,
+	rows = append(rows, form, widget.NewSeparator(), keyStatus, keyPick, keyPaste,
 		container.NewHBox(fileBtn, removeKeyBtn))
 	content := container.NewVBox(rows...)
 

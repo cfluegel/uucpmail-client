@@ -34,14 +34,31 @@ func (c *Conn) Close() error {
 	return nil
 }
 
-// Dial baut die SSH-Verbindung auf (User "uucp", Pubkey-Auth, TOFU-Hostkey)
-// und startet eine Shell-Session ohne PTY. Rückgabe ist der rohe Kanal.
-func Dial(cfg *config.Config) (*Conn, error) {
+// SignerSource liefert den SSH-Signer für den Verbindungsaufbau. Default ist
+// der Datei-Schlüssel; UI/CLI können beim Start z. B. einen FIDO2-Signer
+// einsetzen (SetSignerSource), ohne dass Engine oder Tests davon wissen.
+type SignerSource func(cfg *config.Config) (ssh.Signer, error)
+
+var signerSource SignerSource = fileSignerSource
+
+// SetSignerSource ersetzt die Signer-Quelle (einmalig beim Programmstart).
+func SetSignerSource(f SignerSource) { signerSource = f }
+
+// FileSignerSource ist die Standardquelle: privater Schlüssel aus der Datei.
+func FileSignerSource(cfg *config.Config) (ssh.Signer, error) { return fileSignerSource(cfg) }
+
+func fileSignerSource(_ *config.Config) (ssh.Signer, error) {
 	keyPath, err := config.KeyPath()
 	if err != nil {
 		return nil, err
 	}
-	signer, err := keys.Load(keyPath)
+	return keys.Load(keyPath)
+}
+
+// Dial baut die SSH-Verbindung auf (User "uucp", Pubkey-Auth, TOFU-Hostkey)
+// und startet eine Shell-Session ohne PTY. Rückgabe ist der rohe Kanal.
+func Dial(cfg *config.Config) (*Conn, error) {
+	signer, err := signerSource(cfg)
 	if err != nil {
 		return nil, err
 	}

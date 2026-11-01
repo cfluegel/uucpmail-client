@@ -5,6 +5,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -13,8 +14,10 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/cfluegel/uucpmail-client/pkg/config"
+	"github.com/cfluegel/uucpmail-client/pkg/fido2"
 	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/keys"
+	"github.com/cfluegel/uucpmail-client/pkg/sshtransport"
 )
 
 // showSettings öffnet die Einstellungen als MODALEN Dialog über dem
@@ -137,9 +140,43 @@ func (u *UI) showSettings(firstRun bool) {
 	autosave := widget.NewEntry()
 	autosave.SetText(strconv.Itoa(u.cfg.DraftAutosave))
 	maxSize := widget.NewEntry()
-	maxSize.SetText(strconv.FormatInt(u.cfg.ServiceProfile.MaxMessageBytes, 10))
+	maxSize.SetText(strconv.FormatInt(u.cfg.ServiceProfile.MaxMessageBytes/(1024*1024), 10))
 	rate := widget.NewEntry()
 	rate.SetText(strconv.Itoa(u.cfg.ServiceProfile.WarnMsgsPerHour))
+	trashDays := widget.NewEntry()
+	trashDays.SetText(strconv.Itoa(u.cfg.TrashDays))
+	scrollLines := widget.NewEntry()
+	scrollLines.SetText(strconv.Itoa(u.cfg.ScrollLines))
+	// Signatur: der Unterdialog schreibt in lokale Variablen, übernommen wird
+	// erst in applySave – Abbrechen der Einstellungen verwirft so alles.
+	sigOn, sigReply, sigText := u.cfg.SignatureOn, u.cfg.SignatureReply, u.cfg.SignatureText
+	sigBtn := widget.NewButton(i18n.T("settings.signature.edit"), func() {
+		enableCheck := widget.NewCheck(i18n.T("signature.enable"), nil)
+		enableCheck.SetChecked(sigOn)
+		replyCheck := widget.NewCheck(i18n.T("signature.onreply"), nil)
+		replyCheck.SetChecked(sigReply)
+		textEntry := widget.NewMultiLineEntry()
+		textEntry.SetMinRowsVisible(5)
+		textEntry.Wrapping = fyne.TextWrapWord
+		textEntry.SetText(sigText)
+		content := container.NewVBox(enableCheck, replyCheck, textEntry)
+		dialog.ShowCustomConfirm(i18n.T("settings.signature"), i18n.T("settings.save"),
+			i18n.T("compose.cancel"), content, func(ok bool) {
+				if !ok {
+					return
+				}
+				sigOn, sigReply, sigText = enableCheck.Checked, replyCheck.Checked, textEntry.Text
+			}, win)
+	})
+	dataDirLabel := widget.NewLabel("")
+	dataDirLabel.Wrapping = fyne.TextWrapBreak
+	if dir, err := config.Dir(); err == nil {
+		txt := dir
+		if config.IsPortable() {
+			txt += " " + i18n.T("settings.datadir.portable")
+		}
+		dataDirLabel.SetText(txt)
+	}
 	miscTab := widget.NewForm(
 		widget.NewFormItem(i18n.T("settings.lang"), langSelect),
 		widget.NewFormItem(i18n.T("settings.theme"), themeSelect),
@@ -147,6 +184,10 @@ func (u *UI) showSettings(firstRun bool) {
 		widget.NewFormItem(i18n.T("settings.autosave"), autosave),
 		widget.NewFormItem(i18n.T("settings.maxsize"), maxSize),
 		widget.NewFormItem(i18n.T("settings.rate"), rate),
+		widget.NewFormItem(i18n.T("settings.trashdays"), trashDays),
+		widget.NewFormItem(i18n.T("settings.scrolljump"), scrollLines),
+		widget.NewFormItem(i18n.T("settings.signature"), sigBtn),
+		widget.NewFormItem(i18n.T("settings.datadir"), dataDirLabel),
 	)
 
 	tabs := container.NewAppTabs(
@@ -194,12 +235,24 @@ func (u *UI) showSettings(firstRun bool) {
 			u.pgpCache.SetTTL(pgpCacheTTL(n))
 			u.pgpCache.Clear()
 		}
-		if n, err := strconv.ParseInt(maxSize.Text, 10, 64); err == nil && n > 0 {
-			u.cfg.ServiceProfile.MaxMessageBytes = n
+		// Eingabe in MB; das harte Serverlimit sind 10 MB.
+		if n, err := strconv.ParseInt(strings.TrimSpace(maxSize.Text), 10, 64); err == nil && n > 0 {
+			if n > 10 {
+				u.showError(fmt.Errorf(i18n.T("settings.maxsize.toobig"), n))
+			} else {
+				u.cfg.ServiceProfile.MaxMessageBytes = n * 1024 * 1024
+			}
 		}
 		if n, err := strconv.Atoi(rate.Text); err == nil && n > 0 {
 			u.cfg.ServiceProfile.WarnMsgsPerHour = n
 		}
+		if n, err := strconv.Atoi(trashDays.Text); err == nil && n >= 0 {
+			u.cfg.TrashDays = n
+		}
+		if n, err := strconv.Atoi(scrollLines.Text); err == nil && n > 0 {
+			u.cfg.ScrollLines = n
+		}
+		u.cfg.SignatureOn, u.cfg.SignatureReply, u.cfg.SignatureText = sigOn, sigReply, sigText
 		u.saveConfig()
 		u.applyTheme()
 	}
@@ -265,6 +318,54 @@ func (u *UI) buildKeyTab(win fyne.Window) fyne.CanvasObject {
 			content.Add(widget.NewLabel(err.Error()))
 			return
 		}
+
+		// FIDO2-Security-Key: Haken schaltet den Modus; ohne Stub startet
+		// der Einrichtungs-Wizard (der Modus wird erst nach Erfolg gesetzt).
+		fidoCheck := widget.NewCheck(i18n.T("fido2.enable"), nil)
+		fidoCheck.SetChecked(u.cfg.SSHKeyMode == "fido2")
+		fidoStatus := widget.NewLabel("")
+		fidoStatus.Wrapping = fyne.TextWrapBreak
+		if stubPath, err := config.FIDO2StubPath(); err == nil {
+			if stub, err := fido2.LoadStub(stubPath); err == nil {
+				if pub, err := stub.SSHPublicKey(); err == nil {
+					fidoStatus.SetText(fmt.Sprintf(i18n.T("fido2.status"),
+						stub.Algorithm, keys.Fingerprint(pub)))
+				}
+			}
+		}
+		fidoCheck.OnChanged = func(on bool) {
+			if !on {
+				u.cfg.SSHKeyMode = ""
+				u.saveConfig()
+				sshtransport.SetSignerSource(sshtransport.FileSignerSource)
+				render()
+				content.Refresh()
+				return
+			}
+			stubPath, err := config.FIDO2StubPath()
+			if err == nil {
+				if _, err := fido2.LoadStub(stubPath); err == nil {
+					// Stub vorhanden: Modus direkt aktivieren.
+					u.cfg.SSHKeyMode = "fido2"
+					u.saveConfig()
+					u.installSignerSource()
+					render()
+					content.Refresh()
+					return
+				}
+			}
+			// Noch kein Stub: Wizard; Haken folgt dem Ergebnis.
+			fidoCheck.SetChecked(false)
+			u.showFIDO2Wizard(win, func() {
+				render()
+				content.Refresh()
+			})
+		}
+		content.Add(fidoCheck)
+		if fidoStatus.Text != "" {
+			content.Add(fidoStatus)
+		}
+		content.Add(widget.NewSeparator())
 		signer, err := keys.Load(keyPath)
 		if err != nil {
 			content.Add(widget.NewLabel(i18n.T("settings.key.none")))
@@ -276,7 +377,10 @@ func (u *UI) buildKeyTab(win fyne.Window) fyne.CanvasObject {
 				render()
 				content.Refresh()
 			})
-			content.Add(genBtn)
+			importBtn := widget.NewButton(i18n.T("settings.key.import"), func() {
+				u.importSSHKeyFlow(win, keyPath, func() { render(); content.Refresh() })
+			})
+			content.Add(container.NewHBox(genBtn, importBtn))
 			return
 		}
 		pubLine := keys.AuthorizedLine(signer.PublicKey(), "uucpmail")
@@ -308,11 +412,23 @@ func (u *UI) buildKeyTab(win fyne.Window) fyne.CanvasObject {
 				}, win)
 		})
 		regenBtn.Importance = widget.DangerImportance
+		importBtn := widget.NewButton(i18n.T("settings.key.import"), func() {
+			// Warnung VOR dem Datei-Dialog: der vorhandene private
+			// Schlüssel wird überschrieben.
+			dialog.ShowConfirm(i18n.T("settings.key.import"),
+				i18n.T("settings.key.import.confirm"), func(ok bool) {
+					if !ok {
+						return
+					}
+					u.importSSHKeyFlow(win, keyPath, func() { render(); content.Refresh() })
+				}, win)
+		})
+		importBtn.Importance = widget.DangerImportance
 		hint := widget.NewLabel(i18n.T("settings.key.hint"))
 		hint.Wrapping = fyne.TextWrapWord
 		content.Add(fp)
 		content.Add(pub)
-		content.Add(container.NewHBox(copyBtn, regenBtn))
+		content.Add(container.NewHBox(copyBtn, regenBtn, importBtn))
 		content.Add(hint)
 		content.Add(widget.NewSeparator())
 		// Zur Abgrenzung: der Hostkey des SERVERS aus der known_hosts.
@@ -325,4 +441,25 @@ func (u *UI) buildKeyTab(win fyne.Window) fyne.CanvasObject {
 	}
 	render()
 	return content
+}
+
+// importSSHKeyFlow: Datei wählen → keys.Import (validiert, überschreibt dann
+// Schlüssel + .pub) → Tab neu rendern + Registrierungs-Hinweis. Der alte
+// Schlüssel bleibt bei Validierungsfehlern unangetastet.
+func (u *UI) importSSHKeyFlow(win fyne.Window, keyPath string, done func()) {
+	fd := dialog.NewFileOpen(func(rc fyne.URIReadCloser, err error) {
+		if err != nil || rc == nil {
+			return
+		}
+		src := rc.URI().Path()
+		rc.Close()
+		if err := keys.Import(src, keyPath, "uucpmail"); err != nil {
+			u.showError(err)
+			return
+		}
+		done()
+		dialog.ShowInformation(i18n.T("settings.key.import"),
+			i18n.T("settings.key.import.done"), win)
+	}, win)
+	fd.Show() // kein Endungsfilter: id_ed25519 hat keine Endung
 }

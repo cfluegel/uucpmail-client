@@ -292,14 +292,14 @@ func (u *UI) exportPublicKey(win fyne.Window, info pgp.KeyInfo) {
 
 // groupFpr formatiert den Fingerprint in 4er-Gruppen.
 func groupFpr(fpr string) string {
-	var out []byte
+	var out strings.Builder
 	for i, r := range fpr {
 		if i > 0 && i%4 == 0 {
-			out = append(out, ' ')
+			out.WriteByte(' ')
 		}
-		out = append(out, byte(r))
+		out.WriteRune(r)
 	}
-	return string(out)
+	return out.String()
 }
 
 // pgpCacheTTL liest die konfigurierte Cache-Dauer.

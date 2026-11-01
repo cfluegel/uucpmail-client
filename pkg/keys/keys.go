@@ -36,7 +36,7 @@ func Generate(path, comment string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path+".pub", []byte(AuthorizedLine(sshPub, comment)+"\n"), 0o644)
+	return os.WriteFile(path+".pub", []byte(AuthorizedLine(sshPub, comment)+"\n"), 0o644) // #nosec G306 -- Public Key, bewusst welt-lesbar
 }
 
 // Import validiert eine vorhandene OpenSSH-Privatschlüsseldatei und kopiert sie
@@ -56,7 +56,7 @@ func Import(srcPath, dstPath, comment string) error {
 	if err := os.WriteFile(dstPath, data, 0o600); err != nil {
 		return err
 	}
-	return os.WriteFile(dstPath+".pub", []byte(AuthorizedLine(signer.PublicKey(), comment)+"\n"), 0o644)
+	return os.WriteFile(dstPath+".pub", []byte(AuthorizedLine(signer.PublicKey(), comment)+"\n"), 0o644) // #nosec G306 -- Public Key, bewusst welt-lesbar
 }
 
 // Load liest den Privatschlüssel als ssh.Signer.

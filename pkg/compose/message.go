@@ -41,22 +41,49 @@ type Message struct {
 	Encrypt     bool // OpenPGP: verschlüsseln (immer inkl. encrypt-to-self)
 }
 
-// EnvelopeRecipients liefert alle Zustell-Adressen (To+Cc+Bcc), dedupliziert
-// (case-insensitive) in stabiler Reihenfolge – das rmail-argv.
+// EnvelopeRecipients liefert alle Zustell-Adressen (To+Cc+Bcc) als NACKTE
+// addr-specs (localpart@domain – ohne Anzeigename, ohne <>, ohne
+// MIME-Kodierung), dedupliziert (case-insensitive) in stabiler Reihenfolge –
+// das rmail-argv. uux/rmail trennt an Leerzeichen: Anzeigenamen-Tokens
+// würden serverseitig als ungültige Empfänger abgelehnt (stiller Verlust,
+// siehe EXCHANGE 2026-10-31).
 func (m *Message) EnvelopeRecipients() []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, list := range [][]string{m.To, m.Cc, m.Bcc} {
 		for _, r := range list {
-			key := strings.ToLower(strings.TrimSpace(r))
+			addr := strings.TrimSpace(r)
+			if parsed, err := mail.ParseAddress(addr); err == nil {
+				addr = parsed.Address
+			}
+			key := strings.ToLower(addr)
 			if key == "" || seen[key] {
 				continue
 			}
 			seen[key] = true
-			out = append(out, strings.TrimSpace(r))
+			out = append(out, addr)
 		}
 	}
 	return out
+}
+
+// headerAddressList serialisiert eine Empfängerliste für To/Cc-Header:
+// Anzeigenamen bleiben erhalten und werden bei nicht-ASCII korrekt
+// RFC-2047-kodiert; unparsebare Einträge gehen getrimmt durch.
+func headerAddressList(list []string) string {
+	parts := make([]string, 0, len(list))
+	for _, r := range list {
+		r = strings.TrimSpace(r)
+		if parsed, err := mail.ParseAddress(r); err == nil {
+			if parsed.Name == "" {
+				r = parsed.Address // nackt, ohne <>-Klammern
+			} else {
+				r = parsed.String() // RFC-2047-kodiert nicht-ASCII-Namen
+			}
+		}
+		parts = append(parts, r)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // Validate prüft die Pflichtfelder und Adress-Syntax.
@@ -125,9 +152,9 @@ func (m *Message) BuildParts(version string, draft bool) (outerHdr, inner []byte
 	var sb strings.Builder
 	write := func(k, v string) { sb.WriteString(k + ": " + v + "\r\n") }
 	write("From", m.Identity)
-	write("To", strings.Join(m.To, ", "))
+	write("To", headerAddressList(m.To))
 	if len(m.Cc) > 0 {
-		write("Cc", strings.Join(m.Cc, ", "))
+		write("Cc", headerAddressList(m.Cc))
 	}
 	write("Subject", encodeSubject(m.Subject))
 	write("Date", m.Date.Format(time.RFC1123Z))
@@ -200,6 +227,15 @@ func (m *Message) buildInner() []byte {
 		hdr := textproto.MIMEHeader{}
 		hdr.Set("Content-Type", fmt.Sprintf("%s; name=%q", mt, name))
 		hdr.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name))
+		// RFC 2046 §5.2.1 erlaubt für message/rfc822 nur 7bit/8bit/binary –
+		// angehängte Mails gehen daher unkodiert raus.
+		if mt == "message/rfc822" {
+			hdr.Set("Content-Transfer-Encoding", "8bit")
+			if p, err := mw.CreatePart(hdr); err == nil {
+				_, _ = p.Write(normalizeCRLF(att.Data))
+			}
+			continue
+		}
 		hdr.Set("Content-Transfer-Encoding", "base64")
 		p, err := mw.CreatePart(hdr)
 		if err != nil {
@@ -209,6 +245,12 @@ func (m *Message) buildInner() []byte {
 	}
 	_ = mw.Close()
 	return []byte(sb.String())
+}
+
+// normalizeCRLF stellt CRLF-Zeilenenden her (für unkodierte MIME-Parts).
+func normalizeCRLF(data []byte) []byte {
+	s := strings.ReplaceAll(string(data), "\r\n", "\n")
+	return []byte(strings.ReplaceAll(s, "\n", "\r\n"))
 }
 
 // wrapBase64 kodiert Daten und bricht auf 76 Zeichen pro Zeile (CRLF) um.

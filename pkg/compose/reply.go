@@ -123,3 +123,15 @@ func addressOnly(s string) string {
 	}
 	return s
 }
+
+// SignatureBlock baut den Signaturblock für den Mailtext: zwei Leerzeilen
+// Abstand, dann das übliche "-- "-Trennzeichen (Strich-Strich-Leerzeichen,
+// von vielen Clients beim Antworten erkannt), darunter die Signatur.
+// Leerer Text liefert "".
+func SignatureBlock(text string) string {
+	text = strings.TrimRight(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	return "\n\n-- \n" + text + "\n"
+}
