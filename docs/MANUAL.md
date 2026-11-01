@@ -126,7 +126,10 @@ actions in the SSH tab take effect immediately.)
   service afterwards; passphrase-protected files are rejected). Plus the
   **"Use FIDO2 SSH key"** checkbox: guided setup of a resident key on a
   security token (PIN + touch on every connection; the file key remains
-  as fallback). Below: the server host keys from known_hosts.
+  as fallback). If a token is already set up, "Set up again…" restarts the
+  wizard (e.g. to move to a different token; the previous key stays on
+  the old token and remains registered). Below: the server host keys
+  from known_hosts.
 - **PGP:** generate your key pair (validity selectable, multiple
   identities per key), import/export, manage foreign keys, passphrase
   cache duration.

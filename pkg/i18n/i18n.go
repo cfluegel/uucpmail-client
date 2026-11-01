@@ -47,6 +47,7 @@ func T(key string) string {
 // gosec G101 (hardcoded credentials) ist hier ein False Positive.
 var tables = map[string]map[string]string{
 	"de": { // #nosec G101 -- Übersetzungstexte, keine Credentials
+		"fido2.reenroll":                 "Neu einrichten…",
 		"settings.key.import":            "Schlüssel importieren…",
 		"settings.key.import.confirm":    "Der vorhandene private SSH-Schlüssel wird durch die gewählte Datei ÜBERSCHRIEBEN. Bis der neue öffentliche Schlüssel beim Dienst registriert ist, schlagen Verbindungen fehl. (Tipp: vorher unter „Sicherung“ ein Backup erstellen.) Fortfahren?",
 		"settings.key.import.done":       "Schlüssel importiert. Registriere den neuen öffentlichen Schlüssel beim Dienst, bevor du synchronisierst.",
@@ -301,6 +302,7 @@ var tables = map[string]map[string]string{
 		"no":                             "Nein",
 	},
 	"en": { // #nosec G101 -- Übersetzungstexte, keine Credentials
+		"fido2.reenroll":                 "Set up again…",
 		"settings.key.import":            "Import key…",
 		"settings.key.import.confirm":    "The existing private SSH key will be OVERWRITTEN by the selected file. Until the new public key is registered with the service, connections will fail. (Tip: create a backup under Backup first.) Continue?",
 		"settings.key.import.done":       "Key imported. Register the new public key with the service before syncing.",

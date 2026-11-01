@@ -133,6 +133,9 @@ Verschlüsseln automatisch gefunden (Zuordnung über die E-Mail-Adresse).
   **„FIDO2 SSH Key nutzen"**: geführte Einrichtung eines residenten
   Schlüssels auf einem Security-Key (PIN + Berührung bei jeder
   Verbindung; der Datei-Schlüssel bleibt als Rückfall erhalten).
+  Ist bereits ein Token eingerichtet, startet „Neu einrichten…" den
+  Wizard erneut (z. B. für den Umzug auf ein anderes Token; der bisherige
+  Schlüssel bleibt auf dem alten Token und registriert).
   Unten die Server-Hostkeys aus der known_hosts.
 - **PGP:** eigenes Schlüsselpaar erzeugen (Gültigkeit wählbar, mehrere
   Identitäten je Schlüssel), importieren/exportieren, fremde Schlüssel

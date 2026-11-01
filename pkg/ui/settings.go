@@ -364,6 +364,11 @@ func (u *UI) buildKeyTab(win fyne.Window) fyne.CanvasObject {
 		content.Add(fidoCheck)
 		if fidoStatus.Text != "" {
 			content.Add(fidoStatus)
+			// Neu-Einrichtung mit (anderem) Token: startet den Wizard trotz
+			// vorhandenen Stubs; der alte Stub wird erst bei Erfolg ersetzt.
+			content.Add(widget.NewButton(i18n.T("fido2.reenroll"), func() {
+				u.showFIDO2Wizard(win, func() { render(); content.Refresh() })
+			}))
 		}
 		content.Add(widget.NewSeparator())
 		signer, err := keys.Load(keyPath)
