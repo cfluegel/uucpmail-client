@@ -94,3 +94,24 @@ func TestPortableFileIsNotAFolder(t *testing.T) {
 		t.Fatal("Datei statt Ordner darf nicht portabel schalten")
 	}
 }
+
+func TestLoadTrimsNodeName(t *testing.T) {
+	exeDir := t.TempDir()
+	dataDir := filepath.Join(exeDir, PortableDirName)
+	if err := os.Mkdir(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	withExeDir(t, exeDir)
+
+	raw := `{"node_name": " u4f2410 \t"}`
+	if err := os.WriteFile(filepath.Join(dataDir, "config.json"), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.NodeName != "u4f2410" {
+		t.Fatalf("NodeName = %q, erwartet getrimmt %q", cfg.NodeName, "u4f2410")
+	}
+}

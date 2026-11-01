@@ -22,6 +22,24 @@ const (
 // maxHandshakeString begrenzt defensiv die Länge eines Handshake-Strings.
 const maxHandshakeString = 256
 
+// ValidNodeName prüft, ob ein Node-Name wire-sicher ist: Handshake-Login
+// und S-Commands sind whitespace-getrennte Felder, ein Leerzeichen o.ä. im
+// Namen verschiebt die Felder und führt serverseitig zu „garbled command".
+func ValidNodeName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.' || r == '-' || r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // Wire bündelt den gepufferten Lese- und den Schreibkanal; derselbe Reader
 // muss über Handshake und Protokoll t hinweg verwendet werden, damit keine
 // gepufferten Bytes verloren gehen.

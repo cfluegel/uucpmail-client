@@ -118,6 +118,9 @@ Changes apply on "Save"; "Cancel" discards them. (Exception: the key
 actions in the SSH tab take effect immediately.)
 
 - **Account:** node ID, server, port – from the registration reply.
+  The node ID may only contain letters, digits and `._-`; whitespace
+  (e.g. from copy & paste) is stripped on save, and invalid characters
+  abort the sync with an error message.
 - **Identities:** manage sender addresses, set the default (★).
 - **SSH:** fingerprint and `authorized_keys` line of the transport key
   (copy button for registration), **"Generate new key …"** and **Import key…**
@@ -228,7 +231,9 @@ uucpmail-client sync
 ```
 
 Sends everything in the outbox and fetches waiting mail. FIDO2 mode:
-PIN prompt on the terminal, touch hint on stderr.
+PIN prompt on the terminal, touch hint on stderr. If the server stays
+silent for 2 minutes, the session aborts with an error message (this
+also applies to syncs started from the GUI).
 
 ### queue – outbox/spool status
 

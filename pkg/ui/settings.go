@@ -201,7 +201,7 @@ func (u *UI) showSettings(firstRun bool) {
 	)
 
 	applySave := func() {
-		u.cfg.NodeName = nodeEntry.Text
+		u.cfg.NodeName = strings.TrimSpace(nodeEntry.Text)
 		u.cfg.ServerHost = hostEntry.Text
 		if p, err := strconv.Atoi(portEntry.Text); err == nil && p > 0 {
 			u.cfg.ServerPort = p

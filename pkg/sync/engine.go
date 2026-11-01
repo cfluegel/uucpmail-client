@@ -18,7 +18,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
 )
 
-const Version = "1.2.2"
+const Version = "1.2.3"
 
 // Result fasst einen Sync-Lauf zusammen.
 type Result struct {
@@ -115,13 +115,16 @@ func (e *Engine) Run() (*Result, error) {
 	}
 	defer conn.Close()
 	e.logf("verbunden mit %s:%d", e.Cfg.ServerHost, e.Cfg.ServerPort)
-	return e.RunOn(conn)
+	return e.RunOn(&readTimeoutConn{rw: conn, closer: conn, timeout: sessionReadTimeout})
 }
 
 // RunOn fährt Handshake, Transfer und Shutdown über eine bestehende
 // Verbindung (testbar über net.Pipe) und verarbeitet empfangene Jobs.
 func (e *Engine) RunOn(conn io.ReadWriter) (*Result, error) {
 	res := &Result{}
+	if !uucp.ValidNodeName(e.Cfg.NodeName) {
+		return res, fmt.Errorf("node-Name %q enthält ungültige Zeichen (Leerzeichen?) – bitte in den Einstellungen korrigieren", e.Cfg.NodeName)
+	}
 	wire := uucp.NewWire(conn)
 	hs, err := uucp.Handshake(wire, e.Cfg.NodeName)
 	if err != nil {

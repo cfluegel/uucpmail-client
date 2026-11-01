@@ -230,6 +230,9 @@ func Load() (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("config.json beschädigt: %w", err)
 	}
+	// Rand-Whitespace (z.B. aus der Registrierungsmail kopiert) macht den
+	// Node-Namen im UUCP-S-Command wire-ungültig – still normalisieren.
+	cfg.NodeName = strings.TrimSpace(cfg.NodeName)
 	return cfg, nil
 }
 

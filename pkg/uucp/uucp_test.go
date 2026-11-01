@@ -215,3 +215,18 @@ func TestSNReason(t *testing.T) {
 		t.Error("SN4 nicht erkannt")
 	}
 }
+
+func TestValidNodeName(t *testing.T) {
+	valid := []string{"u4f2410", "ub61af8", "node-1", "a.b_c", "U7A2F4C"}
+	for _, s := range valid {
+		if !ValidNodeName(s) {
+			t.Errorf("ValidNodeName(%q) = false, erwartet true", s)
+		}
+	}
+	invalid := []string{"", "u4f2410 ", " u4f2410", "u4f 2410", "u4f\t2410", "u4f2410\n", "näme", "a/b"}
+	for _, s := range invalid {
+		if ValidNodeName(s) {
+			t.Errorf("ValidNodeName(%q) = true, erwartet false", s)
+		}
+	}
+}

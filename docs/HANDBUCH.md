@@ -123,6 +123,9 @@ Verschlüsseln automatisch gefunden (Zuordnung über die E-Mail-Adresse).
 (Ausnahmen: die Schlüssel-Aktionen im SSH-Tab wirken sofort.)
 
 - **Account:** Node-ID, Server, Port – aus der Registrierungs-Antwort.
+  Die Node-ID darf nur Buchstaben, Ziffern und `._-` enthalten;
+  Leerzeichen (z. B. vom Kopieren) werden beim Speichern entfernt, bei
+  ungültigen Zeichen bricht der Abgleich mit einer Fehlermeldung ab.
 - **Identitäten:** Absenderadressen verwalten, Standard festlegen (★).
 - **SSH:** Fingerprint und `authorized_keys`-Zeile des Transportschlüssels
   (Kopieren-Knopf für die Registrierung), **„Neuen Schlüssel erzeugen …"** und
@@ -243,7 +246,9 @@ uucpmail-client sync
 ```
 
 Sendet alles aus der Outbox und holt wartende Mails ab. FIDO2-Modus:
-PIN-Abfrage im Terminal, Berührungs-Hinweis auf stderr.
+PIN-Abfrage im Terminal, Berührungs-Hinweis auf stderr. Antwortet der
+Server 2 Minuten lang nicht, bricht die Session mit einer Fehlermeldung
+ab (gilt auch für den Abgleich aus der Oberfläche).
 
 ### queue – Outbox/Spool-Status
 

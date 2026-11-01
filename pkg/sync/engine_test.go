@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cfluegel/uucpmail-client/pkg/compose"
 	"github.com/cfluegel/uucpmail-client/pkg/config"
@@ -430,5 +431,26 @@ func TestEnqueueStripsDisplayNamesFromRmail(t *testing.T) {
 		if rcpts[i] != want[i] {
 			t.Fatalf("rmail-argv[%d] = %q, erwartet %q", i, rcpts[i], want[i])
 		}
+	}
+}
+
+func TestInvalidNodeNameAbortsBeforeHandshake(t *testing.T) {
+	e := newEngine(t)
+	e.Cfg.NodeName = "u7a2f4c " // Leerzeichen → wire-ungültig (Beta-Fall u4f2410)
+	srv := &fakeserver.Server{WantCaller: "u7a2f4c"}
+	_, err, _ := run(t, e, srv)
+	if err == nil || !strings.Contains(err.Error(), "ungültige Zeichen") {
+		t.Fatalf("erwartet Node-Namen-Fehler vor dem Handshake, bekam %v", err)
+	}
+}
+
+func TestReadTimeoutConn(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer serverConn.Close()
+	c := &readTimeoutConn{rw: clientConn, closer: clientConn, timeout: 50 * time.Millisecond}
+	buf := make([]byte, 1)
+	_, err := c.Read(buf) // Gegenseite schreibt nie → Timeout statt Hängen
+	if err == nil || !strings.Contains(err.Error(), "keine Antwort") {
+		t.Fatalf("erwartet Timeout-Fehler, bekam %v", err)
 	}
 }
