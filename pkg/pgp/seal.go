@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cfluegel/uucpmail-client/pkg/compose"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/pgpmime"
 )
 
@@ -12,7 +13,7 @@ import (
 type ErrMissingKeys struct{ Addrs []string }
 
 func (e *ErrMissingKeys) Error() string {
-	return "für folgende Empfänger fehlt ein öffentlicher PGP-Schlüssel: " + strings.Join(e.Addrs, ", ")
+	return i18n.T("err.pgp.missingkeys") + strings.Join(e.Addrs, ", ")
 }
 
 // ErrKeyLocked: der eigene Schlüssel ist nicht entsperrt (UI muss vorab die
@@ -20,14 +21,14 @@ func (e *ErrMissingKeys) Error() string {
 type ErrKeyLocked struct{ Email, Fingerprint string }
 
 func (e *ErrKeyLocked) Error() string {
-	return fmt.Sprintf("privater PGP-Schlüssel für %s ist gesperrt", e.Email)
+	return fmt.Sprintf(i18n.T("err.pgp.keylocked"), e.Email)
 }
 
 // ErrNoOwnKey: keine eigene Identität mit privatem Schlüssel.
 type ErrNoOwnKey struct{ Email string }
 
 func (e *ErrNoOwnKey) Error() string {
-	return fmt.Sprintf("kein eigener PGP-Schlüssel für %s vorhanden", e.Email)
+	return fmt.Sprintf(i18n.T("err.pgp.noownkey"), e.Email)
 }
 
 // MailSealer implementiert das Sealer-Interface der Sync-Engine: er macht aus

@@ -7,10 +7,10 @@ import (
 	"crypto/rand"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -19,7 +19,7 @@ import (
 // wird nie überschrieben.
 func Generate(path, comment string) error {
 	if _, err := os.Stat(path); err == nil {
-		return fmt.Errorf("schlüssel existiert bereits: %s (zum Ersetzen erst löschen)", path)
+		return i18n.Errorf("err.keys.exists", path)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -49,9 +49,9 @@ func Import(srcPath, dstPath, comment string) error {
 	signer, err := ssh.ParsePrivateKey(data)
 	if err != nil {
 		if _, ok := err.(*ssh.PassphraseMissingError); ok {
-			return errors.New("schlüssel ist passphrase-geschützt – bitte eine ungeschützte Kopie importieren")
+			return i18n.Errorf("err.keys.protected")
 		}
-		return fmt.Errorf("keine gültige OpenSSH-Privatschlüsseldatei: %w", err)
+		return i18n.Wrap(err, "err.keys.invalid")
 	}
 	if err := os.WriteFile(dstPath, data, 0o600); err != nil {
 		return err
@@ -63,7 +63,7 @@ func Import(srcPath, dstPath, comment string) error {
 func Load(path string) (ssh.Signer, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("kein SSH-Schlüssel unter %s – erst »uucpmail-client keygen« ausführen", path)
+		return nil, i18n.Errorf("err.keys.missing", path)
 	}
 	if err != nil {
 		return nil, err

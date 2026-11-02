@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/cfluegel/uucpmail-client/pkg/config"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/keys"
 )
 
@@ -92,9 +93,9 @@ func Dial(cfg *config.Config) (*Conn, error) {
 	client, err := ssh.Dial("tcp", addr, clientCfg)
 	if err != nil {
 		if hostKeyChanged != nil {
-			return nil, fmt.Errorf("SSH-Verbindung zu %s fehlgeschlagen: %w", addr, hostKeyChanged)
+			return nil, i18n.Wrap(hostKeyChanged, "err.ssh.connect", addr)
 		}
-		return nil, fmt.Errorf("SSH-Verbindung zu %s fehlgeschlagen: %w", addr, err)
+		return nil, i18n.Wrap(err, "err.ssh.connect", addr)
 	}
 	session, err := client.NewSession()
 	if err != nil {

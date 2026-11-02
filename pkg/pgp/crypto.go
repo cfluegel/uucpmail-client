@@ -12,6 +12,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp/clearsign"
 	pgperrors "github.com/ProtonMail/go-crypto/openpgp/errors"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // SigStatus ist der Signaturstatus einer Nachricht (kein Trust-Modell in V1).
@@ -32,10 +33,10 @@ type SigResult struct {
 }
 
 // ErrWrongPassphrase signalisiert eine falsche Passphrase (UI: erneut fragen).
-var ErrWrongPassphrase = errors.New("falsche Passphrase")
+var ErrWrongPassphrase = i18n.Errorf("err.pgp.wrongpass")
 
 // ErrNoPrivateKey: verschlüsselte Nachricht, aber kein passender eigener Schlüssel.
-var ErrNoPrivateKey = errors.New("kein passender privater Schlüssel für diese Nachricht")
+var ErrNoPrivateKey = i18n.Errorf("err.pgp.noprivkey")
 
 // Unlock liefert eine entsperrte Deep-Copy des Entity (Original bleibt
 // verschlüsselt im Keyring). Primärschlüssel UND alle Subkeys werden entsperrt.
@@ -46,7 +47,7 @@ func Unlock(e *openpgp.Entity, passphrase string) (*openpgp.Entity, error) {
 	}
 	el, err := openpgp.ReadKeyRing(&buf)
 	if err != nil || len(el) == 0 {
-		return nil, fmt.Errorf("schlüsselkopie fehlgeschlagen: %w", err)
+		return nil, i18n.Wrap(err, "err.pgp.copyfail")
 	}
 	cp := el[0]
 	pw := []byte(passphrase)
@@ -123,7 +124,7 @@ func Encrypt(data []byte, to []*openpgp.Entity, signer *openpgp.Entity) ([]byte,
 func Decrypt(armored []byte, priv openpgp.EntityList, pub openpgp.EntityList) ([]byte, SigResult, error) {
 	block, err := armor.Decode(bytes.NewReader(armored))
 	if err != nil {
-		return nil, SigResult{}, fmt.Errorf("kein gültiger PGP-Block: %w", err)
+		return nil, SigResult{}, i18n.Wrap(err, "err.pgp.badblock")
 	}
 	ring := append(append(openpgp.EntityList{}, priv...), pub...)
 	md, err := openpgp.ReadMessage(block.Body, ring, nil, nil)
@@ -136,7 +137,7 @@ func Decrypt(armored []byte, priv openpgp.EntityList, pub openpgp.EntityList) ([
 	}
 	plain, err := io.ReadAll(io.LimitReader(md.UnverifiedBody, 64<<20))
 	if err != nil {
-		return nil, SigResult{}, fmt.Errorf("entschlüsselung fehlgeschlagen: %w", err)
+		return nil, SigResult{}, i18n.Wrap(err, "err.pgp.decryptfail")
 	}
 	// Signaturstatus erst NACH vollständigem Lesen auswerten (go-crypto-Kontrakt).
 	res := SigResult{Status: SigNone}

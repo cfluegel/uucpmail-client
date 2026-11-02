@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
@@ -20,7 +21,7 @@ type HostKeyChangedError struct {
 }
 
 func (e *HostKeyChangedError) Error() string {
-	return fmt.Sprintf("hostkey von %s hat sich geändert (neuer Fingerprint %s) – mögliche Man-in-the-Middle-Attacke; bei legitimem Serverwechsel den Eintrag in known_hosts löschen", e.Host, e.Fingerprint)
+	return fmt.Sprintf(i18n.T("err.ssh.hostkeychanged"), e.Host, e.Fingerprint)
 }
 
 // ForgetHost entfernt alle known_hosts-Einträge für den Host (nach einer
@@ -93,7 +94,7 @@ func tofuHostKeyCallback(path string) (ssh.HostKeyCallback, error) {
 			if _, ferr := fmt.Fprintln(f, line); ferr != nil {
 				return ferr
 			}
-			log.Printf("known_hosts: %s neu aufgenommen (Fingerprint %s)", hostname, ssh.FingerprintSHA256(key))
+			log.Printf("known_hosts: added %s (fingerprint %s)", hostname, ssh.FingerprintSHA256(key))
 			return nil
 		}
 		return err

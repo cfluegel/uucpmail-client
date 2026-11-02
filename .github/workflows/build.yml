@@ -33,6 +33,30 @@ jobs:
         # Fehler an unkritischen Stellen (Log/UI-Refresh).
         run: go run github.com/securego/gosec/v2/cmd/gosec@latest -quiet -exclude=G104,G304,G703 ./...
 
+  wiki:
+    # Spiegelt das Handbuch ins GitHub-Wiki (docs/ bleibt die Quelle;
+    # das Wiki nur lesen, nie dort editieren).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wiki aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki
+          # Querverweise der beiden Fassungen auf Wiki-Seitennamen umbiegen.
+          sed 's#](MANUAL\.md)#](MANUAL)#g' docs/HANDBUCH.md > wiki/HANDBUCH.md
+          sed 's#](HANDBUCH\.md)#](HANDBUCH)#g' docs/MANUAL.md > wiki/MANUAL.md
+          cd wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add HANDBUCH.md MANUAL.md
+          git diff --cached --quiet && { echo "Wiki aktuell"; exit 0; }
+          git commit -m "Handbuch-Spiegel von ${GITHUB_SHA::7}"
+          git push
+
   release:
     # Läuft nur für Versions-Tags; baut alle Plattformen und hängt die
     # Artefakte an ein automatisch erstelltes GitHub-Release.

@@ -16,6 +16,8 @@ import (
 	"net/mail"
 	"net/textproto"
 	"strings"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 const (
@@ -59,7 +61,7 @@ type walker struct {
 func Parse(raw []byte) (*ParsedMessage, error) {
 	m, err := mail.ReadMessage(strings.NewReader(string(raw)))
 	if err != nil {
-		return nil, fmt.Errorf("header nicht parsbar: %w", err)
+		return nil, i18n.Wrap(err, "err.mime.badheader")
 	}
 	pm := &ParsedMessage{Header: m.Header}
 	body, err := io.ReadAll(io.LimitReader(m.Body, maxPartSize))

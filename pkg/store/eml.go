@@ -7,8 +7,9 @@ import (
 	"mime"
 	"net/mail"
 
-	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
 	"time"
+
+	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
 )
 
 // metaFromEML extrahiert die Index-Felder aus den RFC-5322-Rohdaten.

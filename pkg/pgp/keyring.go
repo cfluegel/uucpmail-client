@@ -18,6 +18,7 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/armor"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Aliase, damit Aufrufer (UI/Sealer) nicht selbst openpgp importieren müssen.
@@ -47,6 +48,9 @@ type Keyring struct {
 }
 
 // LoadKeyring liest pubring.asc/secring.asc; fehlende Dateien = leerer Ring.
+// ErrNoNewKeys: die importierte Datei enthielt keinen neuen Schlüssel.
+var ErrNoNewKeys = i18n.Errorf("err.pgp.nonewkey")
+
 func LoadKeyring(pubPath, secPath string) (*Keyring, error) {
 	k := &Keyring{pubPath: pubPath, secPath: secPath}
 	var err error
@@ -138,7 +142,7 @@ const DefaultKeyLifetime = 2 * 365 * 24 * time.Hour
 // und speichert beide Ringe. emails[0] wird die primäre UID.
 func (k *Keyring) Generate(name string, emails []string, passphrase string, lifetime time.Duration) (KeyInfo, error) {
 	if len(emails) == 0 {
-		return KeyInfo{}, errors.New("mindestens eine E-Mail-Adresse wird benötigt")
+		return KeyInfo{}, i18n.Errorf("err.pgp.needemail")
 	}
 	cfg := genConfig(lifetime)
 	ent, err := openpgp.NewEntity(name, "", emails[0], cfg)
@@ -147,7 +151,7 @@ func (k *Keyring) Generate(name string, emails []string, passphrase string, life
 	}
 	for _, extra := range emails[1:] {
 		if err := ent.AddUserId(name, "", extra, cfg); err != nil {
-			return KeyInfo{}, fmt.Errorf("identität %s: %w", extra, err)
+			return KeyInfo{}, i18n.Wrap(err, "err.pgp.identity", extra)
 		}
 	}
 	if passphrase != "" {
@@ -192,7 +196,7 @@ func publicHalf(e *openpgp.Entity) (*openpgp.Entity, error) {
 	}
 	el, err := openpgp.ReadKeyRing(&buf)
 	if err != nil || len(el) == 0 {
-		return nil, fmt.Errorf("public-kopie fehlgeschlagen: %w", err)
+		return nil, i18n.Wrap(err, "err.pgp.copyfail")
 	}
 	return el[0], nil
 }
@@ -202,7 +206,7 @@ func publicHalf(e *openpgp.Entity) (*openpgp.Entity, error) {
 func (k *Keyring) ImportPrivate(armored []byte) (KeyInfo, error) {
 	el, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(armored))
 	if err != nil {
-		return KeyInfo{}, fmt.Errorf("keine gültige Schlüsseldatei: %w", err)
+		return KeyInfo{}, i18n.Wrap(err, "err.pgp.badkeyfile")
 	}
 	var imported *openpgp.Entity
 	for _, e := range el {
@@ -210,7 +214,7 @@ func (k *Keyring) ImportPrivate(armored []byte) (KeyInfo, error) {
 			continue
 		}
 		if k.findByFingerprint(k.private, fpr(e)) != nil {
-			return KeyInfo{}, fmt.Errorf("schlüssel %s ist bereits importiert", fpr(e))
+			return KeyInfo{}, i18n.Errorf("err.pgp.dupkey", fpr(e))
 		}
 		pub, err := publicHalf(e)
 		if err != nil {
@@ -223,7 +227,7 @@ func (k *Keyring) ImportPrivate(armored []byte) (KeyInfo, error) {
 		imported = e
 	}
 	if imported == nil {
-		return KeyInfo{}, errors.New("die Datei enthält keinen privaten Schlüssel")
+		return KeyInfo{}, i18n.Errorf("err.pgp.noprivindata")
 	}
 	if err := k.Save(); err != nil {
 		return KeyInfo{}, err
@@ -235,7 +239,7 @@ func (k *Keyring) ImportPrivate(armored []byte) (KeyInfo, error) {
 func (k *Keyring) ImportPublic(armored []byte) ([]KeyInfo, error) {
 	el, err := openpgp.ReadArmoredKeyRing(bytes.NewReader(armored))
 	if err != nil {
-		return nil, fmt.Errorf("keine gültige Schlüsseldatei: %w", err)
+		return nil, i18n.Wrap(err, "err.pgp.badkeyfile")
 	}
 	var infos []KeyInfo
 	for _, e := range el {
@@ -252,7 +256,7 @@ func (k *Keyring) ImportPublic(armored []byte) ([]KeyInfo, error) {
 		infos = append(infos, infoOf(pub, false))
 	}
 	if len(infos) == 0 {
-		return nil, errors.New("kein neuer Schlüssel in der Datei")
+		return nil, ErrNoNewKeys
 	}
 	return infos, k.Save()
 }
@@ -261,7 +265,7 @@ func (k *Keyring) ImportPublic(armored []byte) ([]KeyInfo, error) {
 func (k *Keyring) ExportPublic(fingerprint string) ([]byte, error) {
 	e := k.findByFingerprint(k.public, fingerprint)
 	if e == nil {
-		return nil, fmt.Errorf("schlüssel %s nicht gefunden", fingerprint)
+		return nil, i18n.Errorf("err.pgp.keynotfound", fingerprint)
 	}
 	var buf bytes.Buffer
 	w, err := armor.Encode(&buf, openpgp.PublicKeyType, nil)
@@ -282,7 +286,7 @@ func (k *Keyring) ExportPublic(fingerprint string) ([]byte, error) {
 // Hälfte eines eigenen privaten Schlüssels ist nicht löschbar.
 func (k *Keyring) DeletePublic(fingerprint string) error {
 	if k.findByFingerprint(k.private, fingerprint) != nil {
-		return errors.New("die Public-Hälfte eines eigenen Schlüssels kann nicht gelöscht werden")
+		return i18n.Errorf("err.pgp.ownpubdelete")
 	}
 	for i, e := range k.public {
 		if fpr(e) == strings.ToUpper(fingerprint) {
@@ -290,7 +294,7 @@ func (k *Keyring) DeletePublic(fingerprint string) error {
 			return k.Save()
 		}
 	}
-	return fmt.Errorf("schlüssel %s nicht gefunden", fingerprint)
+	return i18n.Errorf("err.pgp.keynotfound", fingerprint)
 }
 
 // DeletePrivate entfernt einen eigenen Schlüssel SAMT Public-Hälfte aus dem
@@ -307,7 +311,7 @@ func (k *Keyring) DeletePrivate(fingerprint string) error {
 		}
 	}
 	if !found {
-		return fmt.Errorf("schlüssel %s nicht gefunden", fingerprint)
+		return i18n.Errorf("err.pgp.keynotfound", fingerprint)
 	}
 	for i, e := range k.public {
 		if fpr(e) == want {

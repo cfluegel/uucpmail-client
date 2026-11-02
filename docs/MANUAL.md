@@ -170,7 +170,9 @@ popup indicates the waiting state and closes by itself.
 ## Part 2: Command line
 
 All commands use the same data directory as the GUI (portable mode is
-detected automatically). Running without arguments starts the GUI.
+detected automatically). Running without arguments starts the GUI. The
+command line always prints English (script-stable); the language setting
+only affects the GUI.
 
 ### keygen – create or import the SSH key
 
@@ -269,4 +271,4 @@ registration line.
 ### Error behaviour
 
 Every command exits non-zero on failure with a message on stderr
-(`Fehler: …`) – suitable for scripting.
+(`error: …`) – suitable for scripting.

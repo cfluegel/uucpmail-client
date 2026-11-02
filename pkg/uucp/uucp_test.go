@@ -2,11 +2,14 @@ package uucp
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
 	"strings"
 	"testing"
 	"testing/iotest"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // pipePair liefert zwei verbundene Wire-Enden über net.Pipe.
@@ -91,7 +94,7 @@ func TestHandshakeNoProtocolT(t *testing.T) {
 		readHandshakeString(server.R) // UN
 	}()
 	_, err := Handshake(client, "u7a2f4c")
-	if err == nil || !strings.Contains(err.Error(), "Protokoll t") {
+	if !errors.Is(err, ErrNoProtocol) {
 		t.Fatalf("err = %v, erwartet ErrNoProtocol", err)
 	}
 }
@@ -211,7 +214,7 @@ func TestParseReply(t *testing.T) {
 }
 
 func TestSNReason(t *testing.T) {
-	if !strings.Contains(SNReason("4"), "Platz") {
+	if !strings.Contains(SNReason("4"), "out of space") {
 		t.Error("SN4 nicht erkannt")
 	}
 }
@@ -228,5 +231,37 @@ func TestValidNodeName(t *testing.T) {
 		if ValidNodeName(s) {
 			t.Errorf("ValidNodeName(%q) = true, erwartet false", s)
 		}
+	}
+}
+
+func TestUpdateErrorPersistsKey(t *testing.T) {
+	sp, err := OpenSpool(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := &Job{Recipients: []string{"a@b"}}
+	if err := sp.Enqueue([]byte("x"), job); err != nil {
+		t.Fatal(err)
+	}
+	if err := sp.UpdateError(job, i18n.Errorf("err.uucp.rejected", "RX")); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := sp.Jobs()
+	if err != nil || len(jobs) != 1 {
+		t.Fatalf("jobs: %v %v", jobs, err)
+	}
+	if jobs[0].LastErrorKey != "err.uucp.rejected" || len(jobs[0].LastErrorArgs) != 1 || jobs[0].LastErrorArgs[0] != "RX" {
+		t.Fatalf("Key/Args: %q %v", jobs[0].LastErrorKey, jobs[0].LastErrorArgs)
+	}
+	if got := jobs[0].LocalizedError(); got != `handshake rejected: "RX"` {
+		t.Fatalf("LocalizedError: %q", got)
+	}
+	// Nicht-lokalisierter Fehler → nur Fallback-Text.
+	if err := sp.UpdateError(job, errors.New("plain")); err != nil {
+		t.Fatal(err)
+	}
+	jobs, _ = sp.Jobs()
+	if jobs[0].LastErrorKey != "" || jobs[0].LocalizedError() != "plain" {
+		t.Fatalf("Fallback: %q %q", jobs[0].LastErrorKey, jobs[0].LocalizedError())
 	}
 }

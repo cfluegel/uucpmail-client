@@ -35,7 +35,7 @@ func (u *UI) buildPGPTab(win fyne.Window, ttlEntry *widget.Entry) fyne.CanvasObj
 			info := info
 			expiry := i18n.T("settings.pgp.noexpiry")
 			if !info.Expiry.IsZero() {
-				expiry = fmt.Sprintf(i18n.T("settings.pgp.expiry"), info.Expiry.Format("02.01.2006"))
+				expiry = fmt.Sprintf(i18n.T("settings.pgp.expiry"), info.Expiry.Format(i18n.T("date.short")))
 				if time.Now().After(info.Expiry) {
 					expiry = "⚠ " + expiry
 				}

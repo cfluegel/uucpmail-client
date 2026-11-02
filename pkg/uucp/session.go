@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Logf ist der Progress-Callback für UI/CLI (nil = still).
@@ -48,9 +50,9 @@ func (s *Session) Run() (*SessionResult, error) {
 		if err := s.sendJob(job); err != nil {
 			if isWireError(err) {
 				_ = s.Spool.UpdateError(job, err)
-				return res, fmt.Errorf("verbindung während Übertragung von Job %s abgebrochen: %w", job.ID, err)
+				return res, i18n.Wrap(err, "err.uucp.jobaborted", job.ID)
 			}
-			s.logf("Job %s abgelehnt: %v", job.ID, err)
+			s.logf(i18n.T("log.job.rejected"), job.ID, err)
 			_ = s.Spool.UpdateError(job, err)
 			res.Failed = append(res.Failed, job)
 			continue
@@ -59,7 +61,7 @@ func (s *Session) Run() (*SessionResult, error) {
 		if job.Command != "" {
 			what = job.Command
 		}
-		s.logf("Job %s an Server übergeben (%s) – Zustellung erfolgt asynchron", job.ID, what)
+		s.logf(i18n.T("log.job.sent"), job.ID, what)
 		res.Sent = append(res.Sent, job)
 	}
 
@@ -81,7 +83,7 @@ func (s *Session) Run() (*SessionResult, error) {
 			return res, err
 		}
 	default:
-		return res, fmt.Errorf("unerwartete Antwort auf H: %q", reply)
+		return res, i18n.Errorf("err.uucp.badhreply", reply)
 	}
 	return res, nil
 }
@@ -111,7 +113,7 @@ func (s *Session) sendJob(job *Job) error {
 		return err
 	}
 	if err := s.sendFile(dataName, dataName, strings.NewReader(string(data)), int64(len(data))); err != nil {
-		return fmt.Errorf("datendatei: %w", err)
+		return i18n.Wrap(err, "err.uucp.datafile")
 	}
 
 	command := job.Command
@@ -120,7 +122,7 @@ func (s *Session) sendJob(job *Job) error {
 	}
 	xContent := BuildXFile("uucpmail", s.NodeName, dataName, command)
 	if err := s.sendFile("D."+xName[2:], xName, strings.NewReader(xContent), int64(len(xContent))); err != nil {
-		return fmt.Errorf("execute-datei: %w", err)
+		return i18n.Wrap(err, "err.uucp.execfile")
 	}
 	return nil
 }
@@ -140,7 +142,7 @@ func (s *Session) sendFile(from, to string, r *strings.Reader, size int64) error
 	}
 	rep, err := ParseReply(reply)
 	if err != nil || rep.Kind != 'S' {
-		return fmt.Errorf("unerwartete Antwort auf S-Command: %q", reply)
+		return i18n.Errorf("err.uucp.badsreply", reply)
 	}
 	if !rep.OK {
 		return &transferError{SNReason(rep.Detail)}
@@ -154,10 +156,10 @@ func (s *Session) sendFile(from, to string, r *strings.Reader, size int64) error
 	}
 	crep, err := ParseReply(confirm)
 	if err != nil || crep.Kind != 'C' {
-		return fmt.Errorf("unerwartete Übertragungsbestätigung: %q", confirm)
+		return i18n.Errorf("err.uucp.badconfirm", confirm)
 	}
 	if !crep.OK {
-		return &transferError{"Server konnte die Datei nicht ablegen (CN" + crep.Detail + ")"}
+		return &transferError{fmt.Sprintf(i18n.T("err.uucp.cn"), crep.Detail)}
 	}
 	return nil
 }
@@ -199,11 +201,11 @@ func (s *Session) slavePhase(res *SessionResult) error {
 				return err
 			}
 			if confirm, err := s.Wire.ReadCommand(); err == nil && !strings.HasPrefix(confirm, "HY") {
-				s.logf("unerwartete Hangup-Bestätigung: %q", confirm)
+				s.logf(i18n.T("log.hangup.unexpected"), confirm)
 			}
 			return nil
 		default:
-			return fmt.Errorf("unerwartetes Command in Slave-Phase: %q", cmd)
+			return i18n.Errorf("err.uucp.badslavecmd", cmd)
 		}
 	}
 }
@@ -219,7 +221,7 @@ func (s *Session) receiveFile(cmd string) (string, error) {
 	name := filepath.Base(strings.ReplaceAll(req.To, "\\", "/"))
 	if name == "" || name == "." || name == ".." ||
 		(!strings.HasPrefix(name, "D.") && !strings.HasPrefix(name, "X.")) {
-		s.logf("unerwarteter Dateiname %q abgelehnt", req.To)
+		s.logf(i18n.T("log.file.rejectedname"), req.To)
 		if err := s.Wire.WriteCommand("SN2"); err != nil {
 			return "", err
 		}
@@ -262,6 +264,6 @@ func (s *Session) receiveFile(cmd string) (string, error) {
 	if err := s.Wire.WriteCommand("CY"); err != nil {
 		return "", err
 	}
-	s.logf("empfangen: %s (%d Bytes)", name, n)
+	s.logf(i18n.T("log.file.received"), name, n)
 	return dst, nil
 }

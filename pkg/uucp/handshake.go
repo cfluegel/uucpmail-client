@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Handshake-Strings sind \x10…\x00 gerahmt (DLE … NUL).
@@ -54,10 +56,10 @@ func NewWire(rw io.ReadWriter) *Wire {
 
 // Typisierte Handshake-Fehler für verständliche UI-Meldungen.
 var (
-	ErrLocked     = errors.New("server meldet RLCK: Node ist bereits verbunden oder Session-Limit erreicht – später erneut versuchen")
-	ErrUnknown    = errors.New("server kennt diesen Node nicht (»You are unknown to me«) – Registrierung/Serverkonfiguration prüfen")
-	ErrBadSeq     = errors.New("server meldet RBADSEQ: Sequenznummern-Konflikt")
-	ErrNoProtocol = errors.New("server bietet Protokoll t nicht an")
+	ErrLocked     = i18n.Errorf("err.uucp.locked")
+	ErrUnknown    = i18n.Errorf("err.uucp.unknown")
+	ErrBadSeq     = i18n.Errorf("err.uucp.badseq")
+	ErrNoProtocol = i18n.Errorf("err.uucp.noproto")
 )
 
 // WriteString sendet einen DLE-gerahmten Handshake-String.
@@ -97,7 +99,7 @@ func readHandshakeString(r *bufio.Reader) (string, error) {
 			continue
 		}
 		if sb.Len() >= maxHandshakeString {
-			return "", fmt.Errorf("handshake-string länger als %d Bytes", maxHandshakeString)
+			return "", i18n.Errorf("err.uucp.hslong", maxHandshakeString)
 		}
 		sb.WriteByte(b)
 	}
@@ -130,10 +132,10 @@ func Handshake(w *Wire, nodeName string) (*HandshakeResult, error) {
 
 	here, err := readHandshakeString(r)
 	if err != nil {
-		return nil, fmt.Errorf("kein uucico-Banner empfangen: %w", err)
+		return nil, i18n.Wrap(err, "err.uucp.nobanner")
 	}
 	if !strings.HasPrefix(here, "Shere") {
-		return nil, fmt.Errorf("unerwartetes Banner %q (erwartet Shere=…)", here)
+		return nil, i18n.Errorf("err.uucp.badbanner", here)
 	}
 	if rest, ok := strings.CutPrefix(here, "Shere="); ok {
 		res.RemoteName = rest
@@ -146,7 +148,7 @@ func Handshake(w *Wire, nodeName string) (*HandshakeResult, error) {
 
 	reply, err := readHandshakeString(r)
 	if err != nil {
-		return nil, fmt.Errorf("keine Antwort auf Login-String: %w", err)
+		return nil, i18n.Wrap(err, "err.uucp.noreply")
 	}
 	switch {
 	case strings.HasPrefix(reply, "ROKN"):
@@ -170,18 +172,18 @@ func Handshake(w *Wire, nodeName string) (*HandshakeResult, error) {
 	case strings.HasPrefix(reply, "RYou are unknown"):
 		return nil, ErrUnknown
 	default:
-		return nil, fmt.Errorf("handshake abgelehnt: %q", reply)
+		return nil, i18n.Errorf("err.uucp.rejected", reply)
 	}
 
 	protos, err := readHandshakeString(r)
 	if err != nil {
-		return nil, fmt.Errorf("keine Protokollliste empfangen: %w", err)
+		return nil, i18n.Wrap(err, "err.uucp.noprotolist")
 	}
 	if !strings.HasPrefix(protos, "P") || !strings.ContainsRune(protos[1:], 't') {
 		if werr := writeHandshakeString(w.W, "UN"); werr != nil {
 			return nil, werr
 		}
-		return nil, fmt.Errorf("%w (angeboten: %q)", ErrNoProtocol, protos)
+		return nil, fmt.Errorf("%w (%q)", ErrNoProtocol, protos)
 	}
 	if err := writeHandshakeString(w.W, "Ut"); err != nil {
 		return nil, err
@@ -201,11 +203,11 @@ func AnswerHandshake(w *Wire, serverName string, wantCaller string) (string, err
 		return "", err
 	}
 	if !strings.HasPrefix(login, "S") {
-		return "", fmt.Errorf("unerwarteter Login-String %q", login)
+		return "", fmt.Errorf("unexpected login string %q", login)
 	}
 	fields := strings.Fields(login[1:])
 	if len(fields) == 0 {
-		return "", errors.New("leerer Login-String")
+		return "", errors.New("empty login string")
 	}
 	caller := fields[0]
 	if wantCaller != "" && caller != wantCaller {
@@ -223,7 +225,7 @@ func AnswerHandshake(w *Wire, serverName string, wantCaller string) (string, err
 		return caller, err
 	}
 	if use != "Ut" {
-		return caller, fmt.Errorf("client wählte %q statt Ut", use)
+		return caller, fmt.Errorf("client chose %q instead of Ut", use)
 	}
 	return caller, nil
 }

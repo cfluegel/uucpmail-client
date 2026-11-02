@@ -92,6 +92,34 @@ func (e *tabBackEntry) TypedKey(ev *fyne.KeyEvent) {
 		e.canvas.Focus(e.prev)
 		return
 	}
+	// Workaround fyne-io/fyne#6649: Endet die Zeile über dem Cursor mit einem
+	// Leerzeichen exakt an der Umbruchkante, setzt Fyne den Cursor nach
+	// Backspace/Delete ans Ende der NÄCHSTEN logischen Zeile. Ohne Selektion
+	// ist die Sollposition trivial (Backspace: eins zurück, Delete: bleibt) –
+	// abweichende Positionen werden korrigiert. (Rückbau, sobald Upstream fixt.)
+	if (ev.Name == fyne.KeyBackspace || ev.Name == fyne.KeyDelete) && e.SelectedText() == "" {
+		before := e.Entry.CursorTextOffset() // Runen-Offset
+		e.Entry.TypedKey(ev)
+		want := before
+		if ev.Name == fyne.KeyBackspace && before > 0 {
+			want = before - 1
+		}
+		runes := []rune(e.Entry.Text)
+		if want > len(runes) {
+			want = len(runes)
+		}
+		if want >= 0 && e.Entry.CursorTextOffset() != want {
+			moveCursor(&e.Entry, len(string(runes[:want])))
+		}
+		if e.Entry.CursorTextOffset() != want && want > 0 {
+			// Liegt 'want' direkt hinter einem Leerzeichen an der Umbruch-
+			// kante, hat die Position in Fyne keine (Row,Col)-Darstellung
+			// (auch Pfeiltasten überspringen sie). Nächstbester Punkt ist
+			// eine Rune davor: gleiche Zeile, optisch dieselbe Stelle.
+			moveCursor(&e.Entry, len(string(runes[:want-1])))
+		}
+		return
+	}
 	e.Entry.TypedKey(ev)
 }
 

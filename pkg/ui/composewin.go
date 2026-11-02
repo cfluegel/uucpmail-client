@@ -470,40 +470,49 @@ func insertAtCursor(e *widget.Entry, sn compose.MarkdownSnippet) (string, int) {
 	return compose.InsertSnippet(e.Text, cursor, sn)
 }
 
-// cursorOffset rechnet Zeile/Spalte des Entry in einen Byte-Offset um.
+// cursorOffset liefert den Byte-Offset des Cursors. CursorTextOffset ist
+// der einzige wrap-korrekte Weg: CursorRow/Column zählen bei TextWrapWord
+// VISUELLE (umbrochene) Zeilen und Runen, nicht \n-Zeilen und Bytes.
 func cursorOffset(e *widget.Entry) int {
-	lines := strings.Split(e.Text, "\n")
-	offset := 0
-	for i := 0; i < e.CursorRow && i < len(lines); i++ {
-		offset += len(lines[i]) + 1
+	runes := []rune(e.Text)
+	off := e.CursorTextOffset()
+	if off < 0 {
+		off = 0
 	}
-	if e.CursorRow < len(lines) {
-		col := e.CursorColumn
-		if col > len(lines[e.CursorRow]) {
-			col = len(lines[e.CursorRow])
-		}
-		offset += col
+	if off > len(runes) {
+		off = len(runes)
 	}
-	return offset
+	return len(string(runes[:off]))
 }
 
-// moveCursor setzt den Cursor auf den Byte-Offset.
+// moveCursor setzt den Cursor auf den Byte-Offset. CursorRow/Column dürfen
+// nicht aus \n-Zeilen berechnet werden (siehe cursorOffset); statt dessen
+// wird der Cursor über die intern konsistenten Links/Rechts-Pfade des
+// Entry bewegt (Fyne bietet keinen öffentlichen Offset-Setter).
 func moveCursor(e *widget.Entry, offset int) {
+	if offset < 0 {
+		offset = 0
+	}
 	if offset > len(e.Text) {
 		offset = len(e.Text)
 	}
-	row, col := 0, 0
-	for _, r := range e.Text[:offset] {
-		if r == '\n' {
-			row++
-			col = 0
-		} else {
-			col++
-		}
+	if offset == 0 {
+		e.CursorRow, e.CursorColumn = 0, 0
+		e.Refresh()
+		return
 	}
-	e.CursorRow = row
-	e.CursorColumn = col
-	e.Refresh()
+	target := len([]rune(e.Text[:offset]))
+	for range e.Text {
+		cur := e.CursorTextOffset()
+		if cur == target {
+			break
+		}
+		name := fyne.KeyRight
+		if cur > target {
+			name = fyne.KeyLeft
+		}
+		e.TypedKey(&fyne.KeyEvent{Name: name})
+	}
 }
 
 func splitRecipients(s string) []string {

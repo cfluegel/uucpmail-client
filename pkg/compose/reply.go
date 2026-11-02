@@ -47,9 +47,12 @@ func QuoteBody(attribution, text string) string {
 	sb.WriteString("\n\n")
 	sb.WriteString(attribution)
 	sb.WriteString("\n")
-	for _, line := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
-		sb.WriteString("> ")
-		sb.WriteString(line)
+	for _, line := range strings.Split(normalizeNewlines(text), "\n") {
+		// TrimRight entfernt unsichtbare Zeilenend-Leerzeichen (z.B.
+		// format=flowed) und macht Leerzeilen zu ">" statt "> " – sonst
+		// frisst Backspace im Editor unsichtbare Zeichen und der Cursor
+		// scheint zu springen.
+		sb.WriteString(strings.TrimRight("> "+line, " \t"))
 		sb.WriteString("\n")
 	}
 	return strings.TrimRight(sb.String(), "\n") + "\n"
@@ -69,7 +72,7 @@ func ForwardBlock(separator string, headers [][2]string, text string) string {
 		fmt.Fprintf(&sb, "%s: %s\n", kv[0], kv[1])
 	}
 	sb.WriteString("\n")
-	sb.WriteString(strings.ReplaceAll(text, "\r\n", "\n"))
+	sb.WriteString(normalizeNewlines(text))
 	if !strings.HasSuffix(sb.String(), "\n") {
 		sb.WriteString("\n")
 	}
@@ -134,4 +137,11 @@ func SignatureBlock(text string) string {
 		return ""
 	}
 	return "\n\n-- \n" + text + "\n"
+}
+
+// normalizeNewlines vereinheitlicht CRLF und nacktes CR zu LF – Reste von
+// \r im Editor sind unsichtbar und machen Cursorbewegungen unverständlich.
+func normalizeNewlines(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	return strings.ReplaceAll(s, "\r", "\n")
 }

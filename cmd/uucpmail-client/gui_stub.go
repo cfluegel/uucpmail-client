@@ -9,7 +9,7 @@ import (
 
 func runGUI() {
 	if err := ui.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "Fehler:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }

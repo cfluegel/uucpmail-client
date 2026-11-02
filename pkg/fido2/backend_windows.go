@@ -5,11 +5,11 @@ package fido2
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/go-ctap/ctaphid/pkg/webauthntypes"
 	"github.com/go-ctap/winhello"
 	"github.com/ldclabs/cose/iana"
@@ -92,7 +92,7 @@ func (b *winBackend) MakeResidentCredential(ctx context.Context, rpID, userName 
 	}
 	ad := resp.AuthData
 	if ad == nil || ad.AttestedCredentialData == nil {
-		return nil, errors.New("fido2: Windows lieferte keine Credential-Daten")
+		return nil, i18n.Errorf("err.fido2.nocreddata")
 	}
 	return winStubFromCOSE(resp.CredentialID, ad.AttestedCredentialData.CredentialPublicKey, rpID, userName)
 }
@@ -127,7 +127,7 @@ func winStubFromCOSE(credID []byte, k key.Key, rpID, comment string) (*Stub, err
 		st.Algorithm = AlgoECDSA
 		st.PublicKey = MarshalECDSAPublicKey(new(big.Int).SetBytes(xb), new(big.Int).SetBytes(yb), rpID)
 	default:
-		return nil, fmt.Errorf("fido2: nicht unterstützter COSE-Schlüsseltyp %d", k.Kty())
+		return nil, i18n.Errorf("err.fido2.badcose", int(k.Kty()))
 	}
 	return st, nil
 }

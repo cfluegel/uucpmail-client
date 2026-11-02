@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"mime"
 	"net/mail"
@@ -672,7 +673,7 @@ func (p *viewPanel) importKeyAttachment(att mailmime.Part) {
 	u := p.u
 	infos, err := u.keyring.ImportPublic(att.Data)
 	if err != nil {
-		if strings.Contains(err.Error(), "kein neuer Schlüssel") {
+		if errors.Is(err, pgp.ErrNoNewKeys) {
 			dialog.ShowInformation(i18n.T("pgp.import.attach"), i18n.T("pgp.import.exists"), u.win)
 		} else {
 			u.showError(err)

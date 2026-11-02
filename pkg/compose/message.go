@@ -13,6 +13,8 @@ import (
 	"net/textproto"
 	"strings"
 	"time"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Attachment ist eine anzuhängende Datei (MIMEType wird beim Hinzufügen
@@ -89,18 +91,18 @@ func headerAddressList(list []string) string {
 // Validate prüft die Pflichtfelder und Adress-Syntax.
 func (m *Message) Validate() error {
 	if m.Identity == "" {
-		return fmt.Errorf("keine Absenderadresse gewählt")
+		return i18n.Errorf("err.compose.nosender")
 	}
 	if _, err := mail.ParseAddress(m.Identity); err != nil {
-		return fmt.Errorf("ungültige Absenderadresse %q: %w", m.Identity, err)
+		return i18n.Wrap(err, "err.compose.badsender", m.Identity)
 	}
 	if len(m.EnvelopeRecipients()) == 0 {
-		return fmt.Errorf("kein Empfänger angegeben")
+		return i18n.Errorf("err.compose.norcpt")
 	}
 	for _, list := range [][]string{m.To, m.Cc, m.Bcc} {
 		for _, r := range list {
 			if _, err := mail.ParseAddress(r); err != nil {
-				return fmt.Errorf("ungültige Empfängeradresse %q: %w", r, err)
+				return i18n.Wrap(err, "err.compose.badrcpt", r)
 			}
 		}
 	}

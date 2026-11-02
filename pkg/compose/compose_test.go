@@ -3,11 +3,12 @@ package compose
 import (
 	"bytes"
 
-	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
 	"net/mail"
 	"strings"
 	"testing"
 	"time"
+
+	mailmime "github.com/cfluegel/uucpmail-client/pkg/mime"
 )
 
 func TestBuildAndParse(t *testing.T) {

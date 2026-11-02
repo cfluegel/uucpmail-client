@@ -9,8 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
 	"sync"
 	"time"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // ServiceProfile hält weiche Limits (Vorab-Warnungen). Die Durchsetzung liegt
@@ -123,7 +126,7 @@ func Dir() (string, error) {
 		return "", onceErr
 	}
 	if resolvedDir == "" {
-		return "", errors.New("datenverzeichnis nicht ermittelbar")
+		return "", i18n.Errorf("err.config.nodir")
 	}
 	// MkdirAll-Modi sind auf FAT-Medien wirkungslos – unkritisch.
 	if err := os.MkdirAll(resolvedDir, 0o700); err != nil {
@@ -228,7 +231,7 @@ func Load() (*Config, error) {
 	}
 	cfg := Default()
 	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, fmt.Errorf("config.json beschädigt: %w", err)
+		return nil, i18n.Wrap(err, "err.config.corrupt")
 	}
 	// Rand-Whitespace (z.B. aus der Registrierungsmail kopiert) macht den
 	// Node-Namen im UUCP-S-Command wire-ungültig – still normalisieren.
@@ -268,14 +271,14 @@ func (c *Config) Identity(explicit string) (string, error) {
 	if len(c.Identities) > 0 {
 		return c.Identities[0], nil
 	}
-	return "", errors.New("keine Absender-Identität konfiguriert")
+	return "", i18n.Errorf("err.config.noidentity")
 }
 
 // CheckIdentity liefert eine Warnung (kein Fehler), wenn die Adresse nicht zum
 // Dienst passt – autoritativ prüft der Server.
 func CheckIdentity(addr string) string {
 	if !strings.HasSuffix(strings.ToLower(addr), "@uucpmail.de") {
-		return fmt.Sprintf("Warnung: %q endet nicht auf @uucpmail.de – der Server wird den Absender vermutlich ablehnen (553)", addr)
+		return fmt.Sprintf(i18n.T("log.identity.warn"), addr)
 	}
 	return ""
 }

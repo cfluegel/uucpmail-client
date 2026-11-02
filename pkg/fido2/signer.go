@@ -5,11 +5,10 @@ import (
 	"crypto/elliptic"
 	"encoding/asn1"
 	"encoding/binary"
-	"errors"
-	"fmt"
 	"io"
 	"math/big"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -27,10 +26,10 @@ var _ ssh.Signer = (*Signer)(nil)
 func NewSigner(stub *Stub, prompt Prompter) (*Signer, error) {
 	pub, err := stub.SSHPublicKey()
 	if err != nil {
-		return nil, fmt.Errorf("fido2-stub: %w", err)
+		return nil, i18n.Wrap(err, "err.fido2.stub")
 	}
 	if pub.Type() != stub.Algorithm {
-		return nil, fmt.Errorf("fido2-stub: Public Key ist %s, erwartet %s", pub.Type(), stub.Algorithm)
+		return nil, i18n.Errorf("err.fido2.stubkeytype", pub.Type(), stub.Algorithm)
 	}
 	return &Signer{stub: stub, pub: pub, prompt: prompt}, nil
 }
@@ -59,7 +58,7 @@ func (s *Signer) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
 	// sshd rekonstruiert SHA256(app)||flags||counter||SHA256(data) –
 	// Extensions im authData würden die Verifikation brechen.
 	if len(a.AuthData) != 37 {
-		return nil, fmt.Errorf("fido2: authData hat %d Bytes (erwartet 37, Extensions sind nicht erlaubt)", len(a.AuthData))
+		return nil, i18n.Errorf("err.fido2.badauthdata", len(a.AuthData))
 	}
 	flags := a.AuthData[32]
 	if flags&flagUserPresent == 0 {
@@ -88,7 +87,7 @@ func (s *Signer) Sign(rand io.Reader, data []byte) (*ssh.Signature, error) {
 func derToSSHBlob(der []byte) ([]byte, error) {
 	var sig struct{ R, S *big.Int }
 	if rest, err := asn1.Unmarshal(der, &sig); err != nil || len(rest) != 0 {
-		return nil, errors.New("fido2: ungültige ECDSA-Signatur vom Token")
+		return nil, i18n.Errorf("err.fido2.badsig")
 	}
 	return ssh.Marshal(struct{ R, S *big.Int }{sig.R, sig.S}), nil
 }

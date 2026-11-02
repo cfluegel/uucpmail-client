@@ -1,9 +1,10 @@
 package sync
 
 import (
-	"fmt"
 	"io"
 	"time"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // sessionReadTimeout entspricht Taylors cTtimeout (120 s): bleibt der
@@ -42,6 +43,6 @@ func (c *readTimeoutConn) Read(p []byte) (int, error) {
 		if c.closer != nil {
 			_ = c.closer.Close()
 		}
-		return 0, fmt.Errorf("keine Antwort vom Server innerhalb von %s – Verbindung abgebrochen", c.timeout)
+		return 0, i18n.Errorf("err.sync.timeout", c.timeout)
 	}
 }

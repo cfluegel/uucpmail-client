@@ -2,8 +2,9 @@ package uucp
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Protokoll t (Taylor prott.c), zugeschnitten auf zuverlässige 8-Bit-Kanäle:
@@ -44,7 +45,7 @@ func (w *Wire) ReadCommand() (string, error) {
 		}
 		all = append(all, block...)
 		if len(all) > 16*tCmdBlock {
-			return "", fmt.Errorf("protokoll t: command ohne NUL nach %d Bytes", len(all))
+			return "", i18n.Errorf("err.uucp.cmdnonul", len(all))
 		}
 	}
 }
@@ -59,7 +60,7 @@ func (w *Wire) SendFile(r io.Reader) (int64, error) {
 		n, err := r.Read(buf)
 		if n > len(buf) {
 			// Invariante des io.Reader-Vertrags; schützt die uint32-Konvertierung.
-			return total, fmt.Errorf("protokoll t: Reader lieferte %d > %d Bytes", n, len(buf))
+			return total, i18n.Errorf("err.uucp.readerlen", n, len(buf))
 		}
 		if n > 0 {
 			binary.BigEndian.PutUint32(hdr, uint32(n)) // #nosec G115 -- n oben gegen len(buf)=512 geprüft
@@ -97,7 +98,7 @@ func (w *Wire) ReceiveFile(dst io.Writer) (int64, error) {
 			return total, nil
 		}
 		if n > maxDataRecord {
-			return total, fmt.Errorf("protokoll t: record-länge %d überschreitet limit %d", n, maxDataRecord)
+			return total, i18n.Errorf("err.uucp.recordlen", n, maxDataRecord)
 		}
 		if _, err := io.CopyN(dst, w.R, int64(n)); err != nil {
 			return total, err

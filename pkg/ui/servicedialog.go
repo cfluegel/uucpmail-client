@@ -25,7 +25,7 @@ func (u *UI) buildServiceStatusBox() fyne.CanvasObject {
 		if ts.IsZero() {
 			return i18n.T("tarif.never")
 		}
-		return fmt.Sprintf(i18n.T("tarif.asof"), ts.Local().Format("02.01.2006 15:04"))
+		return fmt.Sprintf(i18n.T("tarif.asof"), ts.Local().Format(i18n.T("date.long")))
 	}
 
 	box := container.NewVBox()

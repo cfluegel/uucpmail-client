@@ -13,12 +13,13 @@ import (
 
 	"github.com/cfluegel/uucpmail-client/pkg/compose"
 	"github.com/cfluegel/uucpmail-client/pkg/config"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/sshtransport"
 	"github.com/cfluegel/uucpmail-client/pkg/store"
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
 )
 
-const Version = "1.2.3"
+const Version = "1.3.0"
 
 // Result fasst einen Sync-Lauf zusammen.
 type Result struct {
@@ -59,7 +60,7 @@ func (e *Engine) Enqueue(msg *compose.Message) (*store.Meta, error) {
 	var raw []byte
 	if msg.Sign || msg.Encrypt {
 		if e.PGP == nil {
-			return nil, fmt.Errorf("PGP ist nicht initialisiert")
+			return nil, i18n.Errorf("err.sync.pgpnotinit")
 		}
 		outer, inner := msg.BuildParts(Version, false)
 		var err error
@@ -70,7 +71,7 @@ func (e *Engine) Enqueue(msg *compose.Message) (*store.Meta, error) {
 		raw = msg.Build(Version)
 	}
 	if max := e.Cfg.ServiceProfile.MaxMessageBytes; max > 0 && int64(len(raw)) > max {
-		e.logf("Warnung: Nachricht ist %d Bytes und überschreitet das konfigurierte Limit von %d Bytes – der Server lehnt sie möglicherweise ab", len(raw), max)
+		e.logf(i18n.T("log.msg.toolarge"), len(raw), max)
 	}
 	meta, err := e.Store.Add(store.Outbox, raw, msg.Identity, true)
 	if err != nil {
@@ -97,13 +98,13 @@ func (e *Engine) Enqueue(msg *compose.Message) (*store.Meta, error) {
 func (e *Engine) EnqueueControl(request string) error {
 	request = strings.TrimSpace(request)
 	if request == "" {
-		return fmt.Errorf("leerer Steuer-Request")
+		return i18n.Errorf("err.sync.emptyctl")
 	}
 	job := &uucp.Job{Command: "uuctl"}
 	if err := e.Spool.Enqueue([]byte(request+"\n"), job); err != nil {
 		return err
 	}
-	e.logf("Steuer-Anfrage eingereiht: %s", request)
+	e.logf(i18n.T("log.ctl.enqueued"), request)
 	return nil
 }
 
@@ -114,7 +115,7 @@ func (e *Engine) Run() (*Result, error) {
 		return &Result{}, err
 	}
 	defer conn.Close()
-	e.logf("verbunden mit %s:%d", e.Cfg.ServerHost, e.Cfg.ServerPort)
+	e.logf(i18n.T("log.connected"), e.Cfg.ServerHost, e.Cfg.ServerPort)
 	return e.RunOn(&readTimeoutConn{rw: conn, closer: conn, timeout: sessionReadTimeout})
 }
 
@@ -123,14 +124,14 @@ func (e *Engine) Run() (*Result, error) {
 func (e *Engine) RunOn(conn io.ReadWriter) (*Result, error) {
 	res := &Result{}
 	if !uucp.ValidNodeName(e.Cfg.NodeName) {
-		return res, fmt.Errorf("node-Name %q enthält ungültige Zeichen (Leerzeichen?) – bitte in den Einstellungen korrigieren", e.Cfg.NodeName)
+		return res, i18n.Errorf("err.sync.nodename", e.Cfg.NodeName)
 	}
 	wire := uucp.NewWire(conn)
 	hs, err := uucp.Handshake(wire, e.Cfg.NodeName)
 	if err != nil {
 		return res, err
 	}
-	e.logf("handshake ok (Gegenstelle %s, Protokoll %c)", hs.RemoteName, hs.Protocol)
+	e.logf(i18n.T("log.handshake.ok"), hs.RemoteName, hs.Protocol)
 
 	session := &uucp.Session{
 		Wire:      wire,
@@ -149,13 +150,13 @@ func (e *Engine) RunOn(conn io.ReadWriter) (*Result, error) {
 			if _, err := e.Store.Get(store.Outbox, job.StoreID); err != nil {
 				// Outbox-Kopie existiert nicht mehr (z.B. verwaister Alt-Job) –
 				// übertragen wurde trotzdem, nur aufräumen.
-				e.logf("hinweis: Outbox-Kopie zu Job %s fehlt bereits", job.ID)
+				e.logf(i18n.T("log.outbox.missing"), job.ID)
 			} else if err := e.Store.Move(store.Outbox, job.StoreID, store.Sent); err != nil {
-				e.logf("konnte %s nicht nach Gesendet verschieben: %v", job.StoreID, err)
+				e.logf(i18n.T("log.move.sent.fail"), job.StoreID, err)
 			}
 		}
 		if err := e.Spool.Complete(job); err != nil {
-			e.logf("spool-aufräumen für Job %s fehlgeschlagen: %v", job.ID, err)
+			e.logf(i18n.T("log.spool.cleanup.fail"), job.ID, err)
 		}
 		res.SentCount++
 	}
@@ -197,7 +198,7 @@ func (e *Engine) RunUuxqt() (int, error) {
 			if errors.Is(err, errIncomplete) {
 				continue // D-Datei folgt in einer späteren Session
 			}
-			e.logf("uuxqt: %s → Quarantäne (%v)", name, err)
+			e.logf(i18n.T("log.uuxqt.quarantine"), name, err)
 			_ = os.Rename(xPath, filepath.Join(e.Spool.QuarantineDir(), name))
 			if firstErr == nil {
 				firstErr = err
@@ -209,7 +210,7 @@ func (e *Engine) RunUuxqt() (int, error) {
 	return count, firstErr
 }
 
-var errIncomplete = errors.New("zugehörige Datendatei fehlt noch")
+var errIncomplete = i18n.Errorf("err.sync.incomplete")
 
 func (e *Engine) execOne(xPath string) error {
 	content, err := os.ReadFile(xPath)
@@ -229,7 +230,7 @@ func (e *Engine) execOne(xPath string) error {
 		dataName = x.Files[0]
 	}
 	if dataName == "" {
-		return fmt.Errorf("execute-datei ohne Eingabedatei")
+		return i18n.Errorf("err.sync.xnoinput")
 	}
 	dataPath := filepath.Join(e.Spool.IncomingDir(), filepath.Base(dataName))
 	raw, err := os.ReadFile(dataPath)
@@ -243,15 +244,15 @@ func (e *Engine) execOne(xPath string) error {
 	if _, err := e.Store.Add(store.Inbox, body, envFrom, false); err != nil {
 		return err
 	}
-	e.logf("neue Nachricht für %s (%d Bytes)", strings.Join(rcpts, ", "), len(body))
+	e.logf(i18n.T("log.mail.received"), strings.Join(rcpts, ", "), len(body))
 	// uuctl-Antworten zusätzlich in den persistierten Dienststatus übernehmen.
 	// Das Server-Limit wird nur angezeigt (Tarif-Reiter) – die weiche
 	// Größenwarnung (ServiceProfile) bleibt die Nutzereinstellung.
 	if kind := parseUUCTLReply(body, &e.Cfg.ServiceStatus, time.Now()); kind != "" {
 		if err := e.Cfg.Save(); err != nil {
-			e.logf("dienststatus speichern: %v", err)
+			e.logf(i18n.T("log.status.savefail"), err)
 		} else {
-			e.logf("Dienststatus aktualisiert (%s, Tarif %s)", kind, e.Cfg.ServiceStatus.Tier)
+			e.logf(i18n.T("log.status.updated"), kind, e.Cfg.ServiceStatus.Tier)
 		}
 	}
 	_ = os.Remove(dataPath)
@@ -282,7 +283,7 @@ func (e *Engine) QueueStatus() (string, error) {
 		return "", err
 	}
 	if len(jobs) == 0 {
-		return "Outbox/Spool ist leer.\n", nil
+		return i18n.T("queue.empty") + "\n", nil
 	}
 	var sb strings.Builder
 	for _, j := range jobs {
@@ -290,10 +291,10 @@ func (e *Engine) QueueStatus() (string, error) {
 		if j.Command != "" {
 			target = "[" + j.Command + "]"
 		}
-		fmt.Fprintf(&sb, "%s  %s  an %s  (Versuche: %d)",
+		fmt.Fprintf(&sb, i18n.T("queue.line"),
 			j.Created.Format(time.DateTime), j.ID, target, j.Attempts)
-		if j.LastError != "" {
-			fmt.Fprintf(&sb, "  Fehler: %s", j.LastError)
+		if msg := j.LocalizedError(); msg != "" {
+			fmt.Fprintf(&sb, i18n.T("queue.error"), msg)
 		}
 		sb.WriteString("\n")
 	}

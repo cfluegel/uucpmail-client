@@ -31,30 +31,30 @@ func main() {
 	case "help", "-h", "--help":
 		usage()
 	default:
-		fmt.Fprintf(os.Stderr, "unbekanntes Kommando %q\n\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown command %q\n\n", os.Args[1])
 		usage()
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Fehler:", err)
+		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Print(`uucpmail-client – Mail-Client für uucpmail.de
+	fmt.Print(`uucpmail-client – mail client for uucpmail.de
 
-Aufruf:
-  uucpmail-client                 GUI starten
-  uucpmail-client keygen          SSH-Schlüssel erzeugen und Pubkey anzeigen
-  uucpmail-client pgp-keygen      PGP-Schlüsselpaar erzeugen (-name, -email, -pass)
-  uucpmail-client send <rcpt...>  Mail von stdin lesen und in die Outbox stellen
-  uucpmail-client sync            UUCP-Session fahren (senden + abholen)
-  uucpmail-client queue           Outbox/Spool-Status anzeigen
-  uucpmail-client ctl quota|usage Dienststatus abfragen (Antwort per Mail)
-  uucpmail-client fido2 list|enroll [-new]  FIDO2-Security-Key einrichten
+Usage:
+  uucpmail-client                 start the GUI
+  uucpmail-client keygen          generate an SSH key and print the pubkey
+  uucpmail-client pgp-keygen      generate a PGP key pair (-name, -email, -pass)
+  uucpmail-client send <rcpt...>  read a mail from stdin into the outbox
+  uucpmail-client sync            run a UUCP session (send + fetch)
+  uucpmail-client queue           show outbox/spool status
+  uucpmail-client ctl quota|usage query service status (reply arrives by mail)
+  uucpmail-client fido2 list|enroll [-new]  set up a FIDO2 security key
 
-Portabler Modus: Liegt ein Ordner "uucpmail-data" neben dem Programm,
-werden alle Daten dort gespeichert (z. B. USB-Stick).
+Portable mode: if a folder "uucpmail-data" sits next to the binary,
+all data is stored there (e.g. on a USB stick).
 `)
 }

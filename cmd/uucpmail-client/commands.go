@@ -23,8 +23,8 @@ import (
 
 func cmdKeygen(args []string) error {
 	fs := flag.NewFlagSet("keygen", flag.ContinueOnError)
-	comment := fs.String("comment", "uucpmail", "Kommentar für den öffentlichen Schlüssel")
-	importPath := fs.String("import", "", "vorhandenen OpenSSH-Privatschlüssel importieren statt neu zu erzeugen")
+	comment := fs.String("comment", "uucpmail", "comment for the public key")
+	importPath := fs.String("import", "", "import an existing OpenSSH private key instead of generating one")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -43,10 +43,10 @@ func cmdKeygen(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Schlüssel gespeichert unter:", keyPath)
+	fmt.Println("key saved at:", keyPath)
 	fmt.Println("Fingerprint:", keys.Fingerprint(signer.PublicKey()))
 	fmt.Println()
-	fmt.Println("Öffentlicher Schlüssel (für die Registrierung an beta@uucpmail.de senden):")
+	fmt.Println("public key (send to beta@uucpmail.de for registration):")
 	fmt.Println(keys.AuthorizedLine(signer.PublicKey(), *comment))
 	return nil
 }
@@ -69,7 +69,7 @@ func loadConfigChecked() (*config.Config, error) {
 	}
 	if !cfg.Complete() {
 		p, _ := config.Path()
-		return nil, fmt.Errorf("konfiguration unvollständig (node_name/server fehlen) – %s bearbeiten oder GUI-Einrichtung nutzen", p)
+		return nil, fmt.Errorf("configuration incomplete (node_name/server missing) – edit %s or use the GUI setup", p)
 	}
 	return cfg, nil
 }
@@ -106,21 +106,21 @@ func stderrLog(format string, args ...any) {
 // als Betreff, Rest Body) und stellt sie in die Outbox.
 func cmdSend(args []string) error {
 	fs := flag.NewFlagSet("send", flag.ContinueOnError)
-	from := fs.String("from", "", "Absender-Identität (Default: default_identity)")
+	from := fs.String("from", "", "sender identity (default: default_identity)")
 	subject := fs.String("subject", "", "Betreff")
-	cc := fs.String("cc", "", "CC-Empfänger (Komma-getrennt)")
-	bcc := fs.String("bcc", "", "BCC-Empfänger (Komma-getrennt, nur Envelope)")
-	attach := fs.String("attach", "", "Datei anhängen (Pfad)")
+	cc := fs.String("cc", "", "CC recipients (comma-separated)")
+	bcc := fs.String("bcc", "", "BCC recipients (comma-separated, envelope only)")
+	attach := fs.String("attach", "", "attach a file (path)")
 	sign := fs.Bool("sign", false, "Nachricht mit PGP signieren")
-	encrypt := fs.Bool("encrypt", false, "Nachricht mit PGP verschlüsseln")
-	pgpPass := fs.String("pgp-pass", "", "Passphrase des eigenen PGP-Schlüssels (nur für Skripte; GUI fragt interaktiv)")
+	encrypt := fs.Bool("encrypt", false, "encrypt the message with PGP")
+	pgpPass := fs.String("pgp-pass", "", "passphrase of the own PGP key (for scripts; the GUI asks interactively)")
 	now := fs.Bool("sync", false, "nach dem Einreihen sofort eine UUCP-Session fahren")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	rcpts := fs.Args()
 	if len(rcpts) == 0 {
-		return errors.New("aufruf: uucpmail-client send [-from adr] [-subject s] [-sync] <empfänger...> < nachricht.txt")
+		return errors.New("usage: uucpmail-client send [-from addr] [-subject s] [-sync] <recipients...> < message.txt")
 	}
 	cfg, err := requireConfig()
 	if err != nil {
@@ -138,7 +138,7 @@ func cmdSend(args []string) error {
 		}
 	}
 	if !known {
-		return fmt.Errorf("absender %q ist keine konfigurierte Identität – der Server würde die Mail kommentarlos verwerfen (553 ohne Bounce)", identity)
+		return fmt.Errorf("sender %q is not a configured identity – the server would silently drop the mail (553 without bounce)", identity)
 	}
 
 	body, err := io.ReadAll(bufio.NewReader(os.Stdin))
@@ -199,7 +199,7 @@ func cmdSend(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("in Outbox eingereiht: %s (%s)\n", meta.ID, meta.Subject)
+	fmt.Printf("queued in outbox: %s (%s)\n", meta.ID, meta.Subject)
 	if *now {
 		return runSync(eng)
 	}
@@ -225,12 +225,12 @@ func openSealer(identity string, needSigner bool, pass string) (*pgp.MailSealer,
 	if needSigner {
 		own := keyring.FindPrivateByEmail(identity)
 		if own == nil {
-			return nil, fmt.Errorf("kein eigener PGP-Schlüssel für %s (uucpmail-client pgp-keygen)", identity)
+			return nil, fmt.Errorf("no own PGP key for %s (uucpmail-client pgp-keygen)", identity)
 		}
 		if pgp.NeedsPassphrase(own) {
 			unlocked, err := pgp.Unlock(own, pass)
 			if err != nil {
-				return nil, fmt.Errorf("PGP-Schlüssel entsperren: %w (-pgp-pass angeben)", err)
+				return nil, fmt.Errorf("unlocking PGP key: %w (pass -pgp-pass)", err)
 			}
 			for _, info := range keyring.ListPrivate() {
 				if strings.EqualFold(info.Email, identity) {
@@ -245,16 +245,16 @@ func openSealer(identity string, needSigner bool, pass string) (*pgp.MailSealer,
 // cmdPGPKeygen erzeugt ein PGP-Schlüsselpaar im Client-Schlüsselbund.
 func cmdPGPKeygen(args []string) error {
 	fs := flag.NewFlagSet("pgp-keygen", flag.ContinueOnError)
-	name := fs.String("name", "", "Name für die Schlüssel-UIDs")
-	email := fs.String("email", "", "E-Mail-Adresse(n), Komma-getrennt – ein Schlüssel kann mehrere Identitäten tragen")
-	pass := fs.String("pass", "", "Passphrase (leer = ungeschützt)")
-	years := fs.Int("years", 2, "Gültigkeit in Jahren (0 = läuft nicht ab)")
+	name := fs.String("name", "", "name for the key UIDs")
+	email := fs.String("email", "", "e-mail address(es), comma-separated – one key can carry several identities")
+	pass := fs.String("pass", "", "passphrase (empty = unprotected)")
+	years := fs.Int("years", 2, "validity in years (0 = never expires)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	emails := splitList(*email)
 	if len(emails) == 0 {
-		return errors.New("aufruf: uucpmail-client pgp-keygen -name NAME -email ADRESSE[,ADRESSE…] [-pass P] [-years N]")
+		return errors.New("usage: uucpmail-client pgp-keygen -name NAME -email ADDRESS[,ADDRESS…] [-pass P] [-years N]")
 	}
 	pubPath, err := config.PubringPath()
 	if err != nil {
@@ -276,10 +276,10 @@ func cmdPGPKeygen(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("PGP-Schlüssel erzeugt:", info.Fingerprint)
-	fmt.Println("Identitäten:", strings.Join(info.Emails, ", "))
+	fmt.Println("PGP key generated:", info.Fingerprint)
+	fmt.Println("identities:", strings.Join(info.Emails, ", "))
 	if !info.Expiry.IsZero() {
-		fmt.Println("Gültig bis:", info.Expiry.Format("02.01.2006"))
+		fmt.Println("valid until:", info.Expiry.Format("2006-01-02"))
 	}
 	armored, err := keyring.ExportPublic(info.Fingerprint)
 	if err != nil {
@@ -303,7 +303,7 @@ func splitList(s string) []string {
 // cmdCtl reicht eine uuctl-Self-Service-Anfrage ein (quota|usage).
 func cmdCtl(args []string) error {
 	fs := flag.NewFlagSet("ctl", flag.ContinueOnError)
-	now := fs.Bool("sync", false, "anschließend sofort eine UUCP-Session fahren")
+	now := fs.Bool("sync", false, "run a UUCP session right away")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -317,7 +317,7 @@ func cmdCtl(args []string) error {
 		}
 	}
 	if what != "quota" && what != "usage" || fs.NArg() > 0 {
-		return errors.New("aufruf: uucpmail-client ctl quota|usage [-sync]")
+		return errors.New("usage: uucpmail-client ctl quota|usage [-sync]")
 	}
 	cfg, err := requireConfig()
 	if err != nil {
@@ -331,7 +331,7 @@ func cmdCtl(args []string) error {
 	if err := eng.EnqueueControl("GET " + what); err != nil {
 		return err
 	}
-	fmt.Println("Anfrage eingereiht – Antwort kommt als Mail an die Hauptadresse (zweiter Sync nötig).")
+	fmt.Println("request queued – the reply arrives as mail to the main address (second sync needed).")
 	if *now {
 		return runSync(eng)
 	}
@@ -353,7 +353,7 @@ func cmdSync(args []string) error {
 
 func runSync(eng *syncengine.Engine) error {
 	res, err := eng.Run()
-	fmt.Printf("gesendet: %d, abgelehnt: %d, empfangen: %d\n",
+	fmt.Printf("sent: %d, rejected: %d, received: %d\n",
 		res.SentCount, res.FailedCount, res.ReceivedCount)
 	return err
 }

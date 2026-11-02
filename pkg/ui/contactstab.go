@@ -250,7 +250,7 @@ func (u *UI) showContactEditDialogPrefilled(win fyne.Window, existing *contacts.
 				switch {
 				case err == nil:
 					c.KeyFingerprint = pickKeyForEmail(infos, c.Email)
-				case strings.Contains(err.Error(), "kein neuer Schlüssel"):
+				case errors.Is(err, pgp.ErrNoNewKeys):
 					// Key war schon im Ring: vorhandenen referenzieren.
 					if e := u.keyring.FindPublicByEmail(c.Email); e != nil {
 						c.KeyFingerprint = pgp.FingerprintOf(e)

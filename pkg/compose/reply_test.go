@@ -88,3 +88,19 @@ func TestSignatureBlock(t *testing.T) {
 		t.Fatal("Trennzeichen '-- ' (mit Leerzeichen) fehlt")
 	}
 }
+
+func TestQuoteBodyNormalizesWhitespace(t *testing.T) {
+	// format=flowed-Zeilenenden, Leerzeile und nacktes CR im Original.
+	got := QuoteBody("Am X schrieb Y:", "erste Zeile \n\nzweite\rdritte\t")
+	want := "\n\nAm X schrieb Y:\n> erste Zeile\n>\n> zweite\n> dritte\n"
+	if got != want {
+		t.Fatalf("QuoteBody:\n got: %q\nwant: %q", got, want)
+	}
+}
+
+func TestForwardBlockNormalizesBareCR(t *testing.T) {
+	got := ForwardBlock("--- Original ---", nil, "a\rb\r\nc")
+	if !strings.Contains(got, "a\nb\nc") || strings.Contains(got, "\r") {
+		t.Fatalf("ForwardBlock lässt CR durch: %q", got)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"strings"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // XFile repräsentiert eine X.*-Execute-Datei (uux-Job).
@@ -65,7 +67,7 @@ func ParseXFile(content string) (*XFile, error) {
 		return nil, err
 	}
 	if x.Command == "" {
-		return nil, fmt.Errorf("execute-datei ohne C-Zeile")
+		return nil, i18n.Errorf("err.uucp.xnocmd")
 	}
 	return x, nil
 }
@@ -75,7 +77,7 @@ func ParseXFile(content string) (*XFile, error) {
 func (x *XFile) RmailRecipients() ([]string, error) {
 	fields := strings.Fields(x.Command)
 	if len(fields) < 2 || fields[0] != "rmail" {
-		return nil, fmt.Errorf("nicht unterstütztes Kommando %q (nur rmail)", x.Command)
+		return nil, i18n.Errorf("err.uucp.xbadcmd", x.Command)
 	}
 	return fields[1:], nil
 }

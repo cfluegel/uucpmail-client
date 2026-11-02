@@ -180,7 +180,8 @@ schließt sich von selbst.
 
 Alle Kommandos nutzen dasselbe Datenverzeichnis wie die Oberfläche
 (portabler Modus wird automatisch erkannt). Aufruf ohne Argumente startet
-die GUI.
+die GUI. Die Kommandozeile gibt grundsätzlich Englisch aus (skript-stabil);
+die Spracheinstellung betrifft nur die Oberfläche.
 
 ### keygen – SSH-Schlüssel erzeugen oder importieren
 
@@ -285,4 +286,4 @@ FIDO2-Modus und gibt die Registrierungszeile aus.
 ### Fehlerverhalten
 
 Jedes Kommando beendet sich bei Fehlern mit Exit-Code ≠ 0 und einer
-Meldung auf stderr (`Fehler: …`) – geeignet für Skripte.
+Meldung auf stderr (`error: …`) – geeignet für Skripte.

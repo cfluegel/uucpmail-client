@@ -2,7 +2,8 @@ package fido2
 
 import (
 	"context"
-	"errors"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Backend abstrahiert den Token-Zugriff. clientData sind die ROHEN zu
@@ -39,11 +40,11 @@ type Prompter interface {
 }
 
 var (
-	ErrNoDevice       = errors.New("kein FIDO2-Security-Key gefunden")
-	ErrPINWrong       = errors.New("falsche PIN")
-	ErrNotSupported   = errors.New("auf dieser Plattform nicht unterstützt")
-	ErrNoCredentials  = errors.New("kein passender Schlüssel auf dem Token")
-	ErrNoUserPresence = errors.New("token hat die Berührung nicht bestätigt")
+	ErrNoDevice       = i18n.Errorf("err.fido2.nodevice")
+	ErrPINWrong       = i18n.Errorf("err.fido2.pinwrong")
+	ErrNotSupported   = i18n.Errorf("err.fido2.notsupported")
+	ErrNoCredentials  = i18n.Errorf("err.fido2.nocreds")
+	ErrNoUserPresence = i18n.Errorf("err.fido2.nouserpresence")
 )
 
 // Flag-Bits im authData (WebAuthn/CTAP2).

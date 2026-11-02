@@ -11,6 +11,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Contact ist ein Adressbucheintrag (bewusst minimal).
@@ -21,12 +23,12 @@ type Contact struct {
 	KeyFingerprint string `json:"key_fingerprint,omitempty"`
 }
 
-// Typisierte Fehler für die i18n-Zuordnung in der UI.
+// Typisierte Fehler; rendern lazy in der aktiven Sprache.
 var (
-	ErrInvalidEmail   = errors.New("ungültige E-Mail-Adresse")
-	ErrDuplicateEmail = errors.New("kontakt mit dieser E-Mail-Adresse existiert bereits")
-	ErrNameRequired   = errors.New("vor- oder Nachname wird benötigt")
-	ErrNotFound       = errors.New("kontakt nicht gefunden")
+	ErrInvalidEmail   = i18n.Errorf("err.contacts.invalidemail")
+	ErrDuplicateEmail = i18n.Errorf("err.contacts.duplicate")
+	ErrNameRequired   = i18n.Errorf("err.contacts.namerequired")
+	ErrNotFound       = i18n.Errorf("err.contacts.notfound")
 )
 
 // Book hält die Kontakte und persistiert nach contacts.json.

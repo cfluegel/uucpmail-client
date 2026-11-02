@@ -8,7 +8,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/ProtonMail/go-crypto/openpgp/packet"
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Files ist die feste Whitelist der gesicherten Dateien (relativ zum
@@ -35,7 +35,7 @@ var Files = []string{
 }
 
 // ErrWrongPassphrase signalisiert eine falsche Backup-Passphrase.
-var ErrWrongPassphrase = errors.New("falsche Passphrase oder beschädigtes Backup")
+var ErrWrongPassphrase = i18n.Errorf("err.backup.wrongpass")
 
 func allowed(name string) bool {
 	for _, f := range Files {
@@ -50,7 +50,7 @@ func allowed(name string) bool {
 // und liefert das verschlüsselte Backup.
 func Create(dir, passphrase string) ([]byte, error) {
 	if strings.TrimSpace(passphrase) == "" {
-		return nil, errors.New("leere Passphrase ist nicht erlaubt")
+		return nil, i18n.Errorf("err.backup.emptypass")
 	}
 	var tarBuf bytes.Buffer
 	tw := tar.NewWriter(&tarBuf)
@@ -77,7 +77,7 @@ func Create(dir, passphrase string) ([]byte, error) {
 		return nil, err
 	}
 	if count == 0 {
-		return nil, errors.New("keine zu sichernden Dateien gefunden")
+		return nil, i18n.Errorf("err.backup.nofiles")
 	}
 
 	var out bytes.Buffer
@@ -125,11 +125,11 @@ func Restore(dir string, data []byte, passphrase string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("backup beschädigt: %w", err)
+			return i18n.Wrap(err, "err.backup.corrupt")
 		}
 		name := filepath.Base(filepath.Clean(hdr.Name))
 		if !allowed(name) {
-			return fmt.Errorf("unerwarteter Eintrag im Backup: %q", hdr.Name)
+			return i18n.Errorf("err.backup.badentry", hdr.Name)
 		}
 		content, err := io.ReadAll(io.LimitReader(tr, 16<<20))
 		if err != nil {
@@ -138,7 +138,7 @@ func Restore(dir string, data []byte, passphrase string) error {
 		restored[name] = content
 	}
 	if len(restored) == 0 {
-		return errors.New("backup enthält keine Dateien")
+		return i18n.Errorf("err.backup.empty")
 	}
 
 	for _, name := range Files {

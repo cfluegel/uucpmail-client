@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -224,7 +225,7 @@ func (s *Store) Get(folder, id string) (*Meta, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		v := tx.Bucket([]byte(folder)).Get([]byte(id))
 		if v == nil {
-			return fmt.Errorf("nachricht %s/%s nicht im Index", folder, id)
+			return i18n.Errorf("err.store.notfound", folder, id)
 		}
 		meta = &Meta{}
 		return json.Unmarshal(v, meta)
@@ -324,7 +325,7 @@ func (s *Store) moveMeta(fromFolder string, meta *Meta) error {
 // Herkunftsordner und Löschzeitpunkt.
 func (s *Store) MoveToTrash(folder, id string) error {
 	if folder == Trash {
-		return fmt.Errorf("nachricht %s ist bereits im Papierkorb", id)
+		return i18n.Errorf("err.store.intrash", id)
 	}
 	meta, err := s.Get(folder, id)
 	if err != nil {

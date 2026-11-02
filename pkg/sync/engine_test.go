@@ -151,7 +151,7 @@ func TestSendRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(m.LastError, "Platz") {
+	if !strings.Contains(m.LastError, "out of space") {
 		t.Errorf("LastError = %q", m.LastError)
 	}
 	jobs, _ := e.Spool.Jobs()
@@ -439,7 +439,7 @@ func TestInvalidNodeNameAbortsBeforeHandshake(t *testing.T) {
 	e.Cfg.NodeName = "u7a2f4c " // Leerzeichen → wire-ungültig (Beta-Fall u4f2410)
 	srv := &fakeserver.Server{WantCaller: "u7a2f4c"}
 	_, err, _ := run(t, e, srv)
-	if err == nil || !strings.Contains(err.Error(), "ungültige Zeichen") {
+	if err == nil || !strings.Contains(err.Error(), "invalid characters") {
 		t.Fatalf("erwartet Node-Namen-Fehler vor dem Handshake, bekam %v", err)
 	}
 }
@@ -450,7 +450,7 @@ func TestReadTimeoutConn(t *testing.T) {
 	c := &readTimeoutConn{rw: clientConn, closer: clientConn, timeout: 50 * time.Millisecond}
 	buf := make([]byte, 1)
 	_, err := c.Read(buf) // Gegenseite schreibt nie → Timeout statt Hängen
-	if err == nil || !strings.Contains(err.Error(), "keine Antwort") {
+	if err == nil || !strings.Contains(err.Error(), "no reply") {
 		t.Fatalf("erwartet Timeout-Fehler, bekam %v", err)
 	}
 }

@@ -100,7 +100,7 @@ func (u *UI) installSignerSource() {
 	}
 	stub, err := fido2.LoadStub(stubPath)
 	if err != nil {
-		fmt.Println("fido2-stub nicht ladbar, nutze Datei-Schlüssel:", err)
+		fmt.Println("fido2 stub not loadable, using file key:", err)
 		return
 	}
 	signer, err := fido2.NewSigner(stub, uiPrompter{u: u})

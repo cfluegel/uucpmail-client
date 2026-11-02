@@ -6,11 +6,10 @@ package fido2
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"time"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -43,13 +42,13 @@ func LoadStub(path string) (*Stub, error) {
 	}
 	st := &Stub{}
 	if err := json.Unmarshal(data, st); err != nil {
-		return nil, fmt.Errorf("fido2-stub beschädigt: %w", err)
+		return nil, i18n.Wrap(err, "err.fido2.stubcorrupt")
 	}
 	if st.Algorithm != AlgoED25519 && st.Algorithm != AlgoECDSA {
-		return nil, fmt.Errorf("fido2-stub: unbekannter Algorithmus %q", st.Algorithm)
+		return nil, i18n.Errorf("err.fido2.stubalgo", st.Algorithm)
 	}
 	if len(st.PublicKey) == 0 {
-		return nil, errors.New("fido2-stub: Public Key fehlt")
+		return nil, i18n.Errorf("err.fido2.stubnokey")
 	}
 	return st, nil
 }

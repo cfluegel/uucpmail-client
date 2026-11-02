@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // SendRequest ist das geparste bzw. zu formatierende `S`-Transfer-Command
@@ -44,7 +46,7 @@ func (s SendRequest) Format(withSize, v103 bool) string {
 func ParseSendRequest(cmd string) (*SendRequest, error) {
 	fields := strings.Fields(cmd)
 	if len(fields) < 5 || fields[0] != "S" {
-		return nil, fmt.Errorf("ungültiges S-Command: %q", cmd)
+		return nil, i18n.Errorf("err.uucp.badscmd", cmd)
 	}
 	req := &SendRequest{From: fields[1], To: fields[2], User: fields[3], Size: -1}
 	rest := fields[4:]
@@ -86,13 +88,13 @@ type Reply struct {
 
 func ParseReply(cmd string) (*Reply, error) {
 	if len(cmd) < 2 {
-		return nil, fmt.Errorf("leere/zu kurze Antwort %q", cmd)
+		return nil, i18n.Errorf("err.uucp.shortreply", cmd)
 	}
 	kind := cmd[0]
 	switch kind {
 	case 'S', 'C', 'H', 'X':
 	default:
-		return nil, fmt.Errorf("unerwartete Antwort %q", cmd)
+		return nil, i18n.Errorf("err.uucp.badreply", cmd)
 	}
 	var ok bool
 	switch cmd[1] {
@@ -101,7 +103,7 @@ func ParseReply(cmd string) (*Reply, error) {
 	case 'N':
 		ok = false
 	default:
-		return nil, fmt.Errorf("unerwartete Antwort %q", cmd)
+		return nil, i18n.Errorf("err.uucp.badreply", cmd)
 	}
 	return &Reply{Kind: kind, OK: ok, Detail: strings.TrimSpace(cmd[2:])}, nil
 }
@@ -110,21 +112,21 @@ func ParseReply(cmd string) (*Reply, error) {
 func SNReason(detail string) string {
 	switch strings.TrimSpace(detail) {
 	case "2":
-		return "Server hat die Übertragung abgelehnt (Berechtigung/Policy)"
+		return i18n.T("err.uucp.sn2")
 	case "4":
-		return "Server hat keinen Platz (Quota/Storage)"
+		return i18n.T("err.uucp.sn4")
 	case "6":
-		return "Datei zu groß für den Server"
+		return i18n.T("err.uucp.sn6")
 	case "7":
-		return "Server kann die Datei gerade nicht annehmen (temporär)"
+		return i18n.T("err.uucp.sn7")
 	case "8":
-		return "Datei bereits übertragen (Duplikat)"
+		return i18n.T("err.uucp.sn8")
 	case "9":
-		return "Zieldatei kann nicht geöffnet werden"
+		return i18n.T("err.uucp.sn9")
 	default:
 		if detail == "" {
-			return "Server hat die Übertragung abgelehnt"
+			return i18n.T("err.uucp.sn")
 		}
-		return "Server hat die Übertragung abgelehnt (Code " + detail + ")"
+		return fmt.Sprintf(i18n.T("err.uucp.sncode"), detail)
 	}
 }

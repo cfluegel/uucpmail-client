@@ -87,7 +87,7 @@ func Run() error {
 	// Papierkorb-Aufräumung beim Start (0 = nie automatisch leeren).
 	if cfg.TrashDays > 0 {
 		if n, err := st.PurgeTrash(time.Duration(cfg.TrashDays) * 24 * time.Hour); err != nil {
-			fmt.Fprintln(os.Stderr, "papierkorb aufräumen:", err)
+			fmt.Fprintln(os.Stderr, "trash purge:", err)
 		} else if n > 0 {
 			u.log.append(fmt.Sprintf(i18n.T("trash.purged"), n, cfg.TrashDays))
 		}
@@ -112,7 +112,7 @@ func Run() error {
 	}
 	if u.contacts, err = contacts.Load(cPath); err != nil {
 		// Beschädigtes Adressbuch blockiert den Start nicht.
-		fmt.Fprintln(os.Stderr, "adressbuch nicht lesbar:", err)
+		fmt.Fprintln(os.Stderr, "contacts not readable:", err)
 		u.contacts, _ = contacts.Load(cPath + ".broken")
 	}
 
@@ -145,6 +145,6 @@ func (u *UI) refresh() {
 // saveConfig persistiert die Config und meldet Fehler im Dialog.
 func (u *UI) saveConfig() {
 	if err := u.cfg.Save(); err != nil {
-		u.showError(fmt.Errorf("konfiguration speichern: %w", err))
+		u.showError(i18n.Wrap(err, "err.ui.savecfg"))
 	}
 }

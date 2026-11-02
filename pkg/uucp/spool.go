@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 )
 
 // Job ist ein ausgehender rmail-Auftrag im lokalen Spool.
@@ -24,6 +26,11 @@ type Job struct {
 	Created    time.Time `json:"created"`
 	Attempts   int       `json:"attempts"`
 	LastError  string    `json:"last_error,omitempty"`
+	// Übersetzbare Fehler zusätzlich als Schlüssel+Argumente, damit die
+	// Anzeige in der jeweils aktiven Sprache rendern kann; LastError bleibt
+	// als gerenderter Fallback (Alt-Einträge, nicht-lokalisierte Ketten).
+	LastErrorKey  string   `json:"last_error_key,omitempty"`
+	LastErrorArgs []string `json:"last_error_args,omitempty"`
 
 	dir string
 }
@@ -91,7 +98,33 @@ func (s *Spool) writeMeta(job *Job) error {
 func (s *Spool) UpdateError(job *Job, cause error) error {
 	job.Attempts++
 	job.LastError = cause.Error()
+	job.LastErrorKey, job.LastErrorArgs = "", nil
+	var ie *i18n.Error
+	if errors.As(cause, &ie) && ie.Wrapped == nil {
+		// Nur wenn der Schlüssel den Fehler vollständig beschreibt –
+		// gewrappte Ketten blieben sonst unvollständig.
+		job.LastErrorKey = ie.Key
+		for _, a := range ie.Args {
+			job.LastErrorArgs = append(job.LastErrorArgs, fmt.Sprint(a))
+		}
+	}
 	return s.writeMeta(job)
+}
+
+// LocalizedError rendert den gespeicherten Fehler in der aktiven Sprache,
+// wenn ein Schlüssel vorliegt, sonst den gespeicherten Text.
+func (j *Job) LocalizedError() string {
+	if j.LastErrorKey == "" {
+		return j.LastError
+	}
+	args := make([]any, len(j.LastErrorArgs))
+	for i, a := range j.LastErrorArgs {
+		args[i] = a
+	}
+	if len(args) == 0 {
+		return i18n.T(j.LastErrorKey)
+	}
+	return fmt.Sprintf(i18n.T(j.LastErrorKey), args...)
 }
 
 // Complete entfernt einen erfolgreich übertragenen Job.
@@ -123,7 +156,7 @@ func (s *Spool) Jobs() ([]*Job, error) {
 		}
 		job := &Job{}
 		if err := json.Unmarshal(meta, job); err != nil {
-			return nil, fmt.Errorf("meta.json in %s beschädigt: %w", dir, err)
+			return nil, i18n.Wrap(err, "err.uucp.badmeta", dir)
 		}
 		job.dir = dir
 		jobs = append(jobs, job)

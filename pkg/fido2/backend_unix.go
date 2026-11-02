@@ -19,6 +19,7 @@ import (
 	"github.com/telesma-app/ctap/protocol"
 	"github.com/telesma-app/ctap/transport"
 
+	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -143,7 +144,7 @@ func (b *hidBackend) MakeResidentCredential(ctx context.Context, rpID, userName 
 		ad = &parsed
 	}
 	if ad.AttestedCredentialData == nil {
-		return nil, errors.New("fido2: Token lieferte keine Credential-Daten")
+		return nil, i18n.Errorf("err.fido2.nocreddata")
 	}
 	return stubFromCredential(ad.AttestedCredentialData.CredentialID,
 		ad.AttestedCredentialData.CredentialPublicKey, rpID, userName)
@@ -197,7 +198,7 @@ func stubFromCredential(credID []byte, key cose.Key, rpID, comment string) (*Stu
 		st.Algorithm = AlgoECDSA
 		st.PublicKey = MarshalECDSAPublicKey(k.X, k.Y, rpID)
 	default:
-		return nil, fmt.Errorf("fido2: nicht unterstützter Schlüsseltyp %T", pub)
+		return nil, i18n.Errorf("err.fido2.badkeytype", fmt.Sprintf("%T", pub))
 	}
 	if _, err := ssh.ParsePublicKey(st.PublicKey); err != nil {
 		return nil, err
