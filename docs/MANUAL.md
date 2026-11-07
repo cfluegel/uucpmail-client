@@ -20,7 +20,8 @@ status notification (DSN) arrives at your main address on the next sync.
 
 Toolbar on top (compose, sync, address book, Web of Trust – spider web
 icon, enabled once you have an own private PGP key –, log window,
-settings), below it the folder tabs:
+settings; at the far right **About** with a question mark: version, link
+to the GitHub page and license), below it the folder tabs:
 
 - **Inbox** – received mail; the counter shows unread messages.
 - **Drafts** – saved drafts (double-click or "Edit" reopens them;

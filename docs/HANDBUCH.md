@@ -22,8 +22,9 @@ Hauptadresse – beim nächsten Sync.
 
 Oben die Werkzeugleiste (Neue Nachricht, Synchronisieren, Adressbuch,
 Web of Trust – Spinnennetz-Symbol, aktiv sobald ein eigener privater
-PGP-Schlüssel existiert –, Protokollfenster, Einstellungen), darunter die
-Ordner-Tabs:
+PGP-Schlüssel existiert –, Protokollfenster, Einstellungen; ganz rechts
+**Über** mit Fragezeichen: Version, Link zur GitHub-Seite und Lizenz),
+darunter die Ordner-Tabs:
 
 - **Posteingang** – empfangene Mails; Zähler zeigt Ungelesene.
 - **Entwürfe** – gespeicherte Entwürfe (Doppelklick oder „Bearbeiten"

@@ -19,7 +19,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
 )
 
-const Version = "1.4.0"
+const Version = "1.4.1"
 
 // Result fasst einen Sync-Lauf zusammen.
 type Result struct {

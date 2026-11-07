@@ -41,6 +41,8 @@ func (u *UI) buildMainWindow() {
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.ListIcon(), func() { u.showLogWindow() }),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { u.showSettings(false) }),
+		widget.NewToolbarSpacer(),
+		widget.NewToolbarAction(theme.QuestionIcon(), func() { u.showAbout() }),
 	)
 
 	u.listZone = newFocusZone(u.messageList.root,
