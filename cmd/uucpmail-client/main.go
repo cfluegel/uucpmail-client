@@ -28,6 +28,8 @@ func main() {
 		err = cmdCtl(os.Args[2:])
 	case "fido2":
 		err = cmdFIDO2(os.Args[2:])
+	case "pgp-card":
+		err = cmdPGPCard(os.Args[2:])
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -47,12 +49,14 @@ func usage() {
 Usage:
   uucpmail-client                 start the GUI
   uucpmail-client keygen          generate an SSH key and print the pubkey
-  uucpmail-client pgp-keygen      generate a PGP key pair (-name, -email, -pass)
+  uucpmail-client pgp-keygen      generate a PGP key pair (-name, -email, -pass required)
   uucpmail-client send <rcpt...>  read a mail from stdin into the outbox
   uucpmail-client sync            run a UUCP session (send + fetch)
   uucpmail-client queue           show outbox/spool status
   uucpmail-client ctl quota|usage query service status (reply arrives by mail)
   uucpmail-client fido2 list|enroll [-new]  set up a FIDO2 security key
+  uucpmail-client pgp-card status read-only OpenPGP smartcard info
+  uucpmail-client pgp-card reset <serial>  factory-reset a smartcard (asks to confirm)
 
 Portable mode: if a folder "uucpmail-data" sits next to the binary,
 all data is stored there (e.g. on a USB stick).

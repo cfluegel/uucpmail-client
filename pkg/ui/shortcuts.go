@@ -29,7 +29,13 @@ func (u *UI) setupKeyboard() {
 
 	// Fallback: landet der Canvas-Fokus im Nichts (z.B. nach Klick in einen
 	// leeren Bereich), Taste an die zuletzt aktive Zone zurückgeben.
+	// NICHT, während ein Dialog/Popup (modales Overlay) offen ist – sonst
+	// lösen Einbuchstaben-Kürzel wie „n" im Einstellungsdialog oder im
+	// Karten-Wizard ungewollt Hauptfenster-Aktionen aus.
 	u.win.Canvas().SetOnTypedKey(func(ev *fyne.KeyEvent) {
+		if u.win.Canvas().Overlays().Top() != nil {
+			return
+		}
 		u.focusZone(u.activeZone)
 		u.handleZoneKey(u.activeZone, ev, false)
 	})

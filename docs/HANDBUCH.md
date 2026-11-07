@@ -21,7 +21,9 @@ Hauptadresse – beim nächsten Sync.
 ### Hauptfenster
 
 Oben die Werkzeugleiste (Neue Nachricht, Synchronisieren, Adressbuch,
-Protokollfenster, Einstellungen), darunter die Ordner-Tabs:
+Web of Trust – Spinnennetz-Symbol, aktiv sobald ein eigener privater
+PGP-Schlüssel existiert –, Protokollfenster, Einstellungen), darunter die
+Ordner-Tabs:
 
 - **Posteingang** – empfangene Mails; Zähler zeigt Ungelesene.
 - **Entwürfe** – gespeicherte Entwürfe (Doppelklick oder „Bearbeiten"
@@ -61,7 +63,8 @@ Unter der Mail die Aktionsleiste: Antworten, Allen antworten,
 Weiterleiten, Löschen – plus kontextabhängig:
 
 - **Entschlüsseln** bei PGP-verschlüsselten Mails (Passphrase wird für die
-  eingestellte Zeit zwischengespeichert).
+  eingestellte Zeit zwischengespeichert; bei einem Schlüssel auf der
+  Smartcard wird stattdessen die Karten-PIN abgefragt).
 - **Bearbeiten** (nur Entwürfe).
 - **Wiederherstellen** (nur Papierkorb) – zurück in den Ursprungsordner,
   wirkt auf die ganze Markierung.
@@ -102,7 +105,9 @@ Die Leiste über dem Text fügt Markdown-Schnipsel ein; dahinter – sobald
 ein eigener PGP-Schlüssel existiert – die Umschalter **Signieren**,
 **Verschlüsseln** (verlangt öffentliche Schlüssel aller Empfänger;
 Gesendet-Kopie wird mitverschlüsselt) und **Schlüssel anhängen** (eigener
-öffentlicher Schlüssel als `.asc`-Anhang).
+öffentlicher Schlüssel als `.asc`-Anhang). Liegt der Schlüssel auf einer
+Smartcard, fragt der Client beim Senden die Karten-PIN ab; sie wird wie
+die Passphrase für die eingestellte Cache-Dauer zwischengespeichert.
 
 „Speichern" legt einen Entwurf an (automatische Zwischenspeicherung läuft
 zusätzlich). Ist in Einstellungen → Allgemein eine Signatur aktiviert,
@@ -141,8 +146,20 @@ Verschlüsseln automatisch gefunden (Zuordnung über die E-Mail-Adresse).
   Schlüssel bleibt auf dem alten Token und registriert).
   Unten die Server-Hostkeys aus der known_hosts.
 - **PGP:** eigenes Schlüsselpaar erzeugen (Gültigkeit wählbar, mehrere
-  Identitäten je Schlüssel), importieren/exportieren, fremde Schlüssel
-  verwalten, Passphrase-Cache-Dauer.
+  Identitäten je Schlüssel; eine Passphrase ist Pflicht – stimmen die
+  beiden Eingaben nicht überein, öffnet sich der Dialog mit geleerten
+  Passphrase-Feldern erneut) oder privaten Schlüssel importieren. Je
+  eigenem Schlüssel: **Exportieren** (öffentlicher Schlüssel zum Kopieren
+  oder Speichern), **Widerruf …** und der rote Mülleimer. „Widerruf …"
+  erzeugt ein Widerrufszertifikat wie `gpg --gen-revoke`: Grund wählen
+  (kein Grund angegeben, kompromittiert, ersetzt, nicht mehr verwendet),
+  optionale Beschreibung, Passphrase – das Zertifikat wird angezeigt und
+  lässt sich kopieren oder als `<Fingerprint>.rev` speichern. Der Schlüssel
+  selbst bleibt gültig; erst wer das Zertifikat in GnuPG importiert oder
+  auf einem Keyserver veröffentlicht, widerruft ihn. Sicher aufbewahren!
+  Darunter der Abschnitt **Smartcard** (siehe unten), Passphrase-Cache-Dauer
+  und Keyserver-Adresse (Standard `hkps://keyserver.ubuntu.com`).
+  Öffentliche Schlüssel anderer verwaltet das Fenster *Web of Trust*.
 - **Tarif:** zuletzt abgefragter Dienststatus (Tarif, Quota/Belegung,
   Queue, Identitäten, Aufbewahrung) mit Abfrage-Knöpfen – die Antwort
   kommt als Mail: ein Sync sendet die Anfrage, der nächste holt sie ab.
@@ -173,6 +190,178 @@ registrieren. Jede Verbindung fragt die PIN ab und verlangt eine
 Berührung des Tokens; solange das Token auf die Berührung wartet, zeigt
 ein kleines Popup „Security-Key berühren …" den Wartezustand an und
 schließt sich von selbst.
+
+### OpenPGP-Smartcard
+
+Der PGP-Schlüssel kann auf einer OpenPGP-Smartcard liegen (z. B. GnuPG-
+bzw. ZeitControl-Karte, Spec 2.x–3.4, oder YubiKey; Kartenleser per
+PC/SC). Abschnitt **Smartcard** in Einstellungen → PGP:
+
+- **Statuszeile:** erkannte Karte mit belegten Slots (SIG/DEC/AUT);
+  „Erneut prüfen" sucht neu. Hält ein anderes Programm (gpg/scdaemon) die
+  Karte, erscheint ein Hinweis – dann z. B. `gpgconf --kill scdaemon`.
+- **Karte für Signieren/Entschlüsseln verwenden:** schaltet den
+  Kartenbetrieb ein oder aus (wirkt sofort).
+- **Karte einrichten …** (Wizard für eine leere Karte): Admin-PIN →
+  Werks-PINs müssen durch eigene ersetzt werden (Nutzer-PIN mind. 6,
+  Admin-PIN mind. 8 Zeichen); bei einer frischen Karte, die es kann,
+  zusätzlich **„PIN nur gehasht übertragen (KDF)"** (standardmäßig an) →
+  Name, Identitäten, Gültigkeit des Hauptschlüssels, RSA-Länge (2048,
+  3072 oder 4096, je nach Karte), Passphrase (Pflicht) → **Pflicht-Backup**
+  des Hauptschlüssels als Datei, *bevor* etwas auf die Karte geschrieben
+  wird → die drei Unterschlüssel (Signieren, Entschlüsseln,
+  Authentisieren) kommen auf die Karte. Der Hauptschlüssel bleibt,
+  durch die Passphrase geschützt, im Schlüsselbund. Ohne das Backup sind
+  bei Verlust der Karte alle verschlüsselten Mails verloren.
+- **Vorhandene Karte verwenden …:** übernimmt eine anderswo (z. B. mit
+  GnuPG) eingerichtete Karte; der passende öffentliche Schlüssel muss im
+  Schlüsselbund sein. RSA-Karten voll nutzbar; Ed25519-Karten nur zum
+  Signieren.
+- **Kartendetails …:** Seriennummer, Hersteller, Leser, Spec-Version,
+  Algorithmen, Slot-Belegung, verbleibende PIN-Versuche, Signatur-PIN
+  (bei jeder Signatur oder einmal pro Sitzung), KDF, Signaturzähler –
+  ohne PIN. Dort außerdem:
+  - **PIN entsperren …** – setzt mit der Admin-PIN eine neue Nutzer-PIN
+    und stellt die Fehlversuche zurück (nach drei Fehleingaben).
+  - **Werksreset …** – löscht alle Schlüssel auf der Karte und setzt die
+    PINs zurück (123456 / 12345678). Zur Bestätigung muss die
+    Seriennummer eingetippt werden, danach folgt eine Rückfrage. War der
+    Client auf diese Karte eingerichtet, wird die Kartennutzung
+    ausgeschaltet.
+- **Subkeys verlängern …:** Die Karten-Unterschlüssel sind 1 Jahr
+  gültig; der Knopf verlängert sie um ein Jahr (braucht die Passphrase
+  des Hauptschlüssels, an der Karte ändert sich nichts). Beim
+  Programmstart warnt der Client, wenn sie in weniger als 30 Tagen
+  ablaufen.
+
+### Web of Trust
+
+Fenster über das Spinnennetz-Symbol der Werkzeugleiste.
+
+- **Mein Schlüssel:** **Signaturen …** (wer hat meinen Schlüssel
+  zertifiziert) und **Fingerprint-Streifen (PDF) …** – eine A4-Seite mit
+  abschneidbaren Streifen (Key-ID und Typ, Name und E-Mail, voller
+  Fingerprint) für Key-Signing-
+  Partys; in Originalgröße drucken.
+- **Öffentliche Schlüssel anderer:** je Schlüssel
+  - **Zertifizieren …** – nach persönlicher Prüfung von Fingerprint und
+    Identität. Der Dialog zeigt Fingerprint, Algorithmen, Erstellungs-
+    und Ablaufdatum (abgelaufene Schlüssel mit gelbem Warndreieck). Zu
+    zertifizierende Identitäten und eigenen Schlüssel wählen, dann
+    (Pflichtauswahl): **„Signieren und an den Inhaber senden"**
+    (vorgewählt) oder **„Nur signieren"**. Senden heißt: je Identität
+    eine signierte und an den Schlüssel des Inhabers verschlüsselte Mail
+    mit genau dieser Zertifizierung an genau diese Adresse (nach einer
+    Bestätigung mit Adressliste; die Mails liegen dann im Postausgang).
+  - **Senden …** – verschickt eine vorhandene eigene Zertifizierung
+    (später oder erneut). Nur aktiv, wenn der Schlüssel eine gültige
+    Signatur von dir trägt; wählbar sind die signierten Identitäten, die
+    primäre ist vorgewählt.
+  - **Signaturen …** – Zertifizierungen anderer, je Identität
+    zugeklappt; Rechtsklick auf einen unbekannten Unterzeichner lädt
+    dessen Schlüssel vom Keyserver.
+  - **?** – Schlüsselinformationen: Haupt- und Unterschlüssel mit
+    Algorithmus, Verwendung (S = signieren, C = zertifizieren,
+    E = verschlüsseln, A = authentisieren), Fingerprint, Erstellungs-
+    und Ablaufdatum, Status (gültig / abgelaufen / widerrufen).
+  - roter Mülleimer – Schlüssel löschen.
+  „✓ geprüft" hinter dem Namen heißt: du hast den Schlüssel gültig
+  zertifiziert.
+- Darunter **Öffentlichen Schlüssel importieren …** (Text einfügen oder
+  Datei; enthaltene neue Zertifizierungen werden übernommen) und **Vom
+  Keyserver herunterladen …** (lange Key-ID oder Fingerprint).
+
+Kann die Zertifizierung nicht zurückgeschickt werden, weil der Schlüssel
+keinen gültigen Verschlüsselungs-Unterschlüssel hat, bleibt sie
+gespeichert. Typisch bei sehr alten Schlüsseln (z. B. GnuPG 1.4,
+DSA/ElGamal), deren Unterschlüssel keine Verwendungsangabe tragen – im
+Info-Dialog steht dann „keine Angabe im Schlüssel". Solche Schlüssel
+unterstützt der Client bewusst nicht zum Verschlüsseln.
+
+### Anwendungsfälle: welcher Schlüssel wofür?
+
+Ein PGP-Schlüssel besteht aus dem **Hauptschlüssel** und
+**Unterschlüsseln**. Beim Karten-Setup liegen nur die Unterschlüssel auf
+der Karte; der Hauptschlüssel bleibt, mit der Passphrase geschützt, im
+Schlüsselbund (bzw. im Backup).
+
+| Aktion | benutzter Schlüssel | Abfrage |
+|---|---|---|
+| Mail signieren | Signatur-Unterschlüssel (genau eine Signatur) | Karten-PIN bzw. Passphrase |
+| Mail entschlüsseln | Verschlüsselungs-Unterschlüssel | Karten-PIN bzw. Passphrase |
+| Fremden Schlüssel zertifizieren | Hauptschlüssel | Passphrase |
+| Widerrufszertifikat erzeugen | Hauptschlüssel | Passphrase |
+| Karten-Subkeys verlängern | Hauptschlüssel | Passphrase |
+
+Unterwegs nur mit der Karte (Hauptschlüssel nicht auf dem Rechner)
+kannst du also Mails signieren und entschlüsseln, aber **keine fremden
+Schlüssel zertifizieren** – das darf in OpenPGP nur der Hauptschlüssel.
+Zertifizieren daher am eigenen Rechner (oder mit dem Backup); „Nur
+signieren" und späteres **Senden …** helfen, das zu entkoppeln.
+
+### Beispiel: sicher unterwegs an fremden Rechnern
+
+Wofür FIDO2-Key, Smartcard und portabler Modus zusammen gedacht sind:
+mobil und vertraulich mailen an einem Rechner, der dir nicht gehört
+(Hotel, Bibliothek, Rechner von Bekannten) – ohne dort etwas zu
+installieren und ohne dass deine privaten Schlüssel den Token verlassen.
+
+**Du brauchst:** einen USB-Stick mit dem Programm und dem Ordner
+`uucpmail-data` (portabler Modus), einen FIDO2-Security-Key für die
+Verbindung zum Server und eine OpenPGP-Karte samt Leser für Signieren
+und Entschlüsseln. Ein YubiKey 5 kann beides zugleich (FIDO2 und
+OpenPGP). Dazu im Kopf: FIDO2-PIN, Karten-PIN, Node-ID.
+
+**Einmalig zu Hause einrichten:**
+
+1. Einstellungen → Sicherung → **„Portablen Datenordner erstellen…"** auf
+   den Stick.
+2. Den Client vom Stick starten; Einstellungen → SSH → **„FIDO2 SSH Key
+   nutzen"** und den angezeigten Schlüssel beim Dienst registrieren.
+3. Einstellungen → PGP → **Karte einrichten …** (mit KDF). Das
+   Pflicht-Backup des Hauptschlüssels gehört an einen sicheren Ort
+   *zu Hause*, nicht auf den Stick.
+4. Fremde Schlüssel, die du unterwegs brauchst, vorher importieren und
+   zertifizieren – zertifizieren geht nur mit dem Hauptschlüssel (siehe
+   Anwendungsfälle).
+
+**Unterwegs:**
+
+1. Stick, Security-Key und Kartenleser einstecken, Programm vom Stick
+   starten. Beim ersten Sync auf einem neuen Rechner den Server-Hostkey
+   einmal bestätigen.
+2. **Synchronisieren:** FIDO2-PIN eingeben und den Key berühren – ohne den
+   Key kommt niemand an dein Postfach.
+3. **Lesen:** verschlüsselte Mails öffnen mit der Karten-PIN; die
+   Entschlüsselung rechnet die Karte, der Klartext wird nicht auf die
+   Platte geschrieben.
+4. **Schreiben:** signieren und verschlüsseln wie gewohnt, Karten-PIN beim
+   Senden.
+5. Danach Programm beenden, alles abziehen. Auf dem Gastrechner bleibt
+   nichts zurück – alle Daten liegen auf dem Stick.
+
+**Was das schützt – und was nicht:**
+
+- Die privaten Schlüssel lassen sich vom Gastrechner nicht kopieren; ohne
+  Token und PINs sind Stick-Inhalt und abgefangene Daten wertlos für
+  Verbindung und Entschlüsselung.
+- Ein verseuchter Gastrechner kann trotzdem mitlesen, was *während* der
+  Nutzung auf dem Bildschirm steht oder getippt wird (Mailtext, PINs). Er
+  kann den Token für die Dauer der Sitzung missbrauchen, nicht aber die
+  Schlüssel behalten. Für wirklich Heikles nur vertrauenswürdige Rechner
+  nutzen.
+- Auf dem Stick liegen weiterhin der Datei-SSH-Schlüssel (Rückfall) und
+  der Hauptschlüssel – beide sind nur so sicher wie Stick und Passphrase.
+  Ist beim Dienst nur noch der Token-Schlüssel registriert, nützt der
+  Datei-SSH-Schlüssel einem Finder nichts; für den Hauptschlüssel ist
+  eine starke Passphrase Pflicht.
+- Zertifizieren fremder Schlüssel ist unterwegs nur möglich, wenn du den
+  Hauptschlüssel samt Passphrase dabei hast – sonst „Nur signieren“ und
+  **Senden …** zu Hause erledigen.
+- Voraussetzungen am Gastrechner: USB-Zugang und ein Kartenleser, den das
+  System ohne Treiberinstallation erkennt (üblich bei CCID-Lesern und
+  YubiKeys). Unter Windows läuft FIDO2 über die System-Oberfläche; dieser
+  Zweig ist noch nicht live getestet.
 
 ---
 
@@ -206,18 +395,18 @@ uucpmail-client keygen -import ~/.ssh/id_ed25519
 ### pgp-keygen – PGP-Schlüsselpaar erzeugen
 
 ```
-uucpmail-client pgp-keygen -name NAME -email ADRESSE[,ADRESSE…] [-pass P] [-years N]
+uucpmail-client pgp-keygen -name NAME -email ADRESSE[,ADRESSE…] -pass P [-years N]
 ```
 
 | Flag | Bedeutung |
 |---|---|
 | `-name` | Name für die Schlüssel-UIDs |
 | `-email` | E-Mail-Adresse(n), Komma-getrennt – ein Schlüssel kann mehrere Identitäten tragen |
-| `-pass` | Passphrase (leer = ungeschützt) |
+| `-pass` | Passphrase (Pflicht) |
 | `-years` | Gültigkeit in Jahren, 0 = läuft nicht ab (Default 2, max. 100) |
 
 ```
-uucpmail-client pgp-keygen -name "Christoph" -email christoph@uucpmail.de,postmaster@uucpmail.de -years 2
+uucpmail-client pgp-keygen -name "Christoph" -email christoph@uucpmail.de,postmaster@uucpmail.de -pass 'geheim' -years 2
 ```
 
 ### send – Mail von stdin in die Outbox stellen
@@ -282,6 +471,21 @@ uucpmail-client fido2 enroll [-new]
 macOS/Linux). `enroll` übernimmt den ersten vorhandenen Schlüssel bzw.
 erzeugt mit `-new` einen neuen, speichert den lokalen Stub, aktiviert den
 FIDO2-Modus und gibt die Registrierungszeile aus.
+
+### pgp-card – OpenPGP-Smartcard
+
+```
+uucpmail-client pgp-card status
+uucpmail-client pgp-card reset SERIENNUMMER
+```
+
+`status` zeigt ohne PIN alle erkannten Karten: Seriennummer, Hersteller,
+Leser, Spec-Version, Algorithmen, Slot-Belegung, PIN-Versuche,
+Signatur-PIN-Modus, KDF und Signaturzähler. `reset` setzt die Karte in
+den Werkszustand (alle Schlüssel weg, PINs 123456 / 12345678) und fragt
+zur Bestätigung die Seriennummer erneut ab; passt sie nicht, bricht das
+Kommando ab. Hält gpg/scdaemon die Karte, vorher
+`gpgconf --kill scdaemon`.
 
 ### Fehlerverhalten
 

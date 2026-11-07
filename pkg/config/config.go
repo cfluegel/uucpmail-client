@@ -46,17 +46,19 @@ type Config struct {
 	ServerPort      int            `json:"server_port"`
 	Identities      []string       `json:"identities"`
 	DefaultIdentity string         `json:"default_identity"`
-	Language        string         `json:"language"`             // "de", "en" oder "" (= OS-Locale)
-	Theme           string         `json:"theme"`                // "", "light", "dark" ("" = System)
-	UIScale         float64        `json:"ui_scale"`             // Schriftgrößen-Faktor, 0/1 = 100 %
-	DraftAutosave   int            `json:"draft_autosave_min"`   // Minuten, 0 = Default (10)
-	PGPCacheMin     int            `json:"pgp_cache_min"`        // Minuten, 0 = immer fragen
-	TrashDays       int            `json:"trash_retention_days"` // Papierkorb-Aufbewahrung in Tagen, 0 = nie leeren
-	ScrollLines     int            `json:"scroll_lines"`         // Shift+Cursor-Sprungweite im Mailtext (Zeilen)
-	SignatureOn     bool           `json:"signature_enabled"`    // Standard-Signatur in neue Mails einfügen
-	SignatureReply  bool           `json:"signature_on_reply"`   // … auch bei Antworten/Weiterleitungen
+	Language        string         `json:"language"`                // "de", "en" oder "" (= OS-Locale)
+	Theme           string         `json:"theme"`                   // "", "light", "dark" ("" = System)
+	UIScale         float64        `json:"ui_scale"`                // Schriftgrößen-Faktor, 0/1 = 100 %
+	DraftAutosave   int            `json:"draft_autosave_min"`      // Minuten, 0 = Default (10)
+	PGPCacheMin     int            `json:"pgp_cache_min"`           // Minuten, 0 = immer fragen
+	PGPKeyserver    string         `json:"pgp_keyserver,omitempty"` // hkps://… für den Schlüsselabruf, leer = pgp.DefaultKeyserver
+	TrashDays       int            `json:"trash_retention_days"`    // Papierkorb-Aufbewahrung in Tagen, 0 = nie leeren
+	ScrollLines     int            `json:"scroll_lines"`            // Shift+Cursor-Sprungweite im Mailtext (Zeilen)
+	SignatureOn     bool           `json:"signature_enabled"`       // Standard-Signatur in neue Mails einfügen
+	SignatureReply  bool           `json:"signature_on_reply"`      // … auch bei Antworten/Weiterleitungen
 	SignatureText   string         `json:"signature_text"`
 	SSHKeyMode      string         `json:"ssh_key_mode,omitempty"` // "", "file" = Datei-Schlüssel; "fido2" = Security-Key
+	PGPCard         bool           `json:"pgp_card,omitempty"`     // aktiver PGP-Schlüssel liegt auf OpenPGP-Smartcard (Stub: pgpcard_key.json)
 	ServiceProfile  ServiceProfile `json:"service_profile"`
 	ServiceStatus   ServiceStatus  `json:"service_status,omitempty"`
 }
@@ -166,6 +168,16 @@ func FIDO2StubPath() (string, error) {
 	return filepath.Join(dir, "fido2_key.json"), nil
 }
 
+// PGPCardStubPath: Stub des kartengestützten OpenPGP-Schlüssels
+// (Serial + Subkey-Fingerprints, pkg/pgpcard).
+func PGPCardStubPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "pgpcard_key.json"), nil
+}
+
 func KnownHostsPath() (string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -189,6 +201,15 @@ func SecringPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "secring.asc"), nil
+}
+
+// PGPVerifiedPath: lokale Web-of-Trust-Prüfvermerke (pgp_verified.json).
+func PGPVerifiedPath() (string, error) {
+	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "pgp_verified.json"), nil
 }
 
 // ContactsPath: das minimale Adressbuch (contacts.json).

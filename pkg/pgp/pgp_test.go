@@ -3,6 +3,7 @@ package pgp
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -306,5 +307,99 @@ func TestDeletePrivateRemovesBothHalves(t *testing.T) {
 	}
 	if err := k.DeletePrivate("DEADBEEF"); err == nil {
 		t.Error("unbekannter Fingerprint nicht abgelehnt")
+	}
+}
+
+// fakeCardSource für den MailSealer-Kartenzweig.
+type fakeCardSource struct {
+	ent *Entity
+	err error
+}
+
+func (f *fakeCardSource) CardEntity(string) (*Entity, error) { return f.ent, f.err }
+
+func TestSignerPrefersCardSource(t *testing.T) {
+	k := newTestKeyring(t)
+	if _, err := k.Generate("Datei", []string{"card@uucpmail.de"}, "geheim123", 0); err != nil {
+		t.Fatal(err)
+	}
+	cardEnt := k.FindPrivateByEmail("card@uucpmail.de")
+
+	// Kartenzweig liefert die gebundene Entity, ohne den Cache zu befragen.
+	s := &MailSealer{Keyring: k, Cache: NewCache(0), Card: &fakeCardSource{ent: cardEnt}}
+	got, err := s.Signer("card@uucpmail.de")
+	if err != nil || got != cardEnt {
+		t.Fatalf("Kartenzweig: got=%p err=%v", got, err)
+	}
+
+	// nil-Entity ohne Fehler = kein Karten-Key → normaler Weg (hier: locked).
+	s.Card = &fakeCardSource{}
+	if _, err := s.Signer("card@uucpmail.de"); err == nil {
+		t.Error("Fallback auf Datei-Schlüssel: ErrKeyLocked erwartet")
+	} else {
+		var locked *ErrKeyLocked
+		if !errors.As(err, &locked) {
+			t.Errorf("Fallback-Fehler: %v", err)
+		}
+	}
+
+	// Kartenfehler (z.B. Karte fehlt) wird durchgereicht, kein stiller Fallback.
+	wantErr := errors.New("karte fehlt")
+	s.Card = &fakeCardSource{err: wantErr}
+	if _, err := s.Signer("card@uucpmail.de"); !errors.Is(err, wantErr) {
+		t.Errorf("Kartenfehler nicht durchgereicht: %v", err)
+	}
+}
+
+func TestExtendSubkeysAndExportBackup(t *testing.T) {
+	k := newTestKeyring(t)
+	ent, err := GenerateCardEntity("Karte", []string{"karte@uucpmail.de"}, 3072, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup, err := ExportPrivateArmored(ent, "geheim123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(backup, []byte("PGP PRIVATE KEY BLOCK")) {
+		t.Error("Backup ist kein privater Armor-Block")
+	}
+	// Backup ist mit der Passphrase geschützt und das Original unangetastet.
+	if ent.PrivateKey.Encrypted {
+		t.Error("Original wurde beim Export verschlüsselt")
+	}
+	info, err := k.AdoptEntity(ent, "geheim123")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var subFprs []string
+	for _, sk := range ent.Subkeys {
+		subFprs = append(subFprs, fmt.Sprintf("%X", sk.PublicKey.Fingerprint))
+	}
+	unlocked, err := Unlock(k.FindPrivateByFingerprint(info.Fingerprint), "geheim123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := k.ExtendSubkeys(info.Fingerprint, subFprs, 2*CardSubkeyLifetime, unlocked); err != nil {
+		t.Fatal(err)
+	}
+
+	// Nach Neuladen vom Datenträger: Signaturen gültig, Laufzeit verlängert.
+	k2, err := LoadKeyring(k.pubPath, k.secPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pub := k2.FindPublicByFingerprint(info.Fingerprint)
+	if pub == nil {
+		t.Fatal("Public-Hälfte nach Verlängerung verschwunden")
+	}
+	for _, sk := range pub.Subkeys {
+		if sk.Sig.KeyLifetimeSecs == nil || *sk.Sig.KeyLifetimeSecs != uint32((2*CardSubkeyLifetime)/time.Second) {
+			t.Errorf("Subkey %X nicht verlängert: %v", sk.PublicKey.Fingerprint, sk.Sig.KeyLifetimeSecs)
+		}
+		if err := pub.PrimaryKey.VerifyKeySignature(sk.PublicKey, sk.Sig); err != nil {
+			t.Errorf("Binding-Signatur ungültig nach Verlängerung: %v", err)
+		}
 	}
 }

@@ -247,14 +247,14 @@ func cmdPGPKeygen(args []string) error {
 	fs := flag.NewFlagSet("pgp-keygen", flag.ContinueOnError)
 	name := fs.String("name", "", "name for the key UIDs")
 	email := fs.String("email", "", "e-mail address(es), comma-separated – one key can carry several identities")
-	pass := fs.String("pass", "", "passphrase (empty = unprotected)")
+	pass := fs.String("pass", "", "passphrase (required)")
 	years := fs.Int("years", 2, "validity in years (0 = never expires)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	emails := splitList(*email)
-	if len(emails) == 0 {
-		return errors.New("usage: uucpmail-client pgp-keygen -name NAME -email ADDRESS[,ADDRESS…] [-pass P] [-years N]")
+	if len(emails) == 0 || *pass == "" {
+		return errors.New("usage: uucpmail-client pgp-keygen -name NAME -email ADDRESS[,ADDRESS…] -pass P [-years N]")
 	}
 	pubPath, err := config.PubringPath()
 	if err != nil {

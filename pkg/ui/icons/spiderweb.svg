@@ -1,0 +1,9 @@
+<!-- Spinnennetz (rund, 8 Speichen, 3 Ringe) – eigener Entwurf für uucpmail-client.
+     Strich-Attribute am Pfad (Fyne färbt nur fill um; currentColor wird zur Laufzeit ersetzt). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+        d="M12 12L12 2M12 12L19.07 4.93M12 12L22 12M12 12L19.07 19.07M12 12L12 22M12 12L4.93 19.07M12 12L2 12M12 12L4.93 4.93
+           M12 8.8Q13.05 9.46 14.26 9.74Q14.54 10.95 15.2 12Q14.54 13.05 14.26 14.26Q13.05 14.54 12 15.2Q10.95 14.54 9.74 14.26Q9.46 13.05 8.8 12Q9.46 10.95 9.74 9.74Q10.95 9.46 12 8.8Z
+           M12 5.8Q14.04 7.07 16.38 7.62Q16.93 9.96 18.2 12Q16.93 14.04 16.38 16.38Q14.04 16.93 12 18.2Q9.96 16.93 7.62 16.38Q7.07 14.04 5.8 12Q7.07 9.96 7.62 7.62Q9.96 7.07 12 5.8Z
+           M12 3Q14.96 4.85 18.36 5.64Q19.15 9.04 21 12Q19.15 14.96 18.36 18.36Q14.96 19.15 12 21Q9.04 19.15 5.64 18.36Q4.85 14.96 3 12Q4.85 9.04 5.64 5.64Q9.04 4.85 12 3Z"/>
+</svg>

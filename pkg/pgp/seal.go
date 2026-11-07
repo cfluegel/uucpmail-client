@@ -31,6 +31,14 @@ func (e *ErrNoOwnKey) Error() string {
 	return fmt.Sprintf(i18n.T("err.pgp.noownkey"), e.Email)
 }
 
+// CardSource liefert die kartengebundene Entity für eine Identität, wenn
+// deren aktiver Schlüssel auf einer OpenPGP-Smartcard liegt (Verdrahtung in
+// der UI-Schicht über pkg/pgpcard). nil-Entity ohne Fehler = Identität ist
+// nicht kartengestützt, der normale Datei-Schlüssel-Weg greift.
+type CardSource interface {
+	CardEntity(identity string) (*Entity, error)
+}
+
 // MailSealer implementiert das Sealer-Interface der Sync-Engine: er macht aus
 // dem inneren MIME-Entity je nach Flags ein multipart/signed bzw.
 // multipart/encrypted (kombinierte One-Pass-Message bei beidem) und setzt die
@@ -38,11 +46,22 @@ func (e *ErrNoOwnKey) Error() string {
 type MailSealer struct {
 	Keyring *Keyring
 	Cache   *Cache
+	Card    CardSource // optional: kartengestützter aktiver Schlüssel
 }
 
 // Signer liefert den entsperrten eigenen Schlüssel für die Identität –
-// aus dem Cache oder direkt, wenn der Schlüssel keine Passphrase hat.
+// kartengebunden (sofern eingerichtet), aus dem Cache oder direkt, wenn der
+// Schlüssel keine Passphrase hat.
 func (s *MailSealer) Signer(identity string) (*Entity, error) {
+	if s.Card != nil {
+		ent, err := s.Card.CardEntity(identity)
+		if err != nil {
+			return nil, err
+		}
+		if ent != nil {
+			return ent, nil
+		}
+	}
 	own := s.Keyring.FindPrivateByEmail(identity)
 	if own == nil {
 		return nil, &ErrNoOwnKey{Email: identity}

@@ -32,8 +32,9 @@ required, identical on all platforms):
 - **Keys**: Settings → PGP. Generate a key pair interactively
   (Ed25519/X25519, v4 – compatible with GnuPG ≥ 2.1, multiple identities
   (UIDs) per key, configurable validity, default 2 years), import an existing
-  private key, export your public key, import/delete other people's public
-  keys. Stored as armored `pubring.asc`/`secring.asc` files (0600).
+  private key, export your public key, create a revocation certificate.
+  Other people's public keys live in the Web of Trust window (see below).
+  Stored as armored `pubring.asc`/`secring.asc` files (0600).
 - **Sending**: "Sign" and "Encrypt" toggle buttons in the compose window
   (separately or combined). Format: PGP/MIME (RFC 3156) with text-mode
   signatures (gateway-safe); signed+encrypted as combined one-pass message.
@@ -45,8 +46,16 @@ required, identical on all platforms):
   passphrase; the unlocked key stays in memory for a configurable time
   (default 15 min) – further encrypted mails open without prompting.
   Decrypted content is never written to disk. Signature status in the view:
-  ✓ valid / ✗ invalid / ? key unknown. No trust/WoT model in V1 – keys are
-  verified manually via fingerprint.
+  ✓ valid / ✗ invalid / ? key unknown.
+- **Web of Trust** (toolbar spider icon): import keys (file, paste,
+  keyserver), certify after checking the fingerprint in person and send
+  the certification back caff-style (one encrypted mail per identity),
+  view certifications, key details and expiry, fingerprint strips as PDF.
+  No trust computation – you decide based on certifications.
+- **OpenPGP smartcard** (GnuPG/ZeitControl card, YubiKey via PC/SC): wizard
+  puts the subkeys on the card (primary key stays in the keyring, mandatory
+  backup); signing and decryption then ask for the card PIN. Card details,
+  PIN unblock, factory reset; CLI `pgp-card status|reset`.
 
 Interoperability is verified end-to-end against GnuPG 2.5 in both directions.
 
@@ -103,7 +112,7 @@ locally via `make cross` (fyne-cross, Docker; macOS builds natively/CI only).
 **Full documentation** (GUI walkthrough and every CLI command with flags
 and examples): **[docs/MANUAL.md](docs/MANUAL.md)**. Besides `sync`, the
 CLI offers `send` (mail from stdin), `queue`, `keygen [-import]`,
-`pgp-keygen`, `ctl quota|usage` and `fido2 enroll`.
+`pgp-keygen`, `ctl quota|usage`, `fido2 enroll` and `pgp-card status|reset`.
 
 ```sh
 uucpmail-client            # GUI (first run: generate key, register the

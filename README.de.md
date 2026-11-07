@@ -36,7 +36,8 @@ lokal `make cross` (fyne-cross, Docker; macOS nur nativ/CI).
 **Vollständige Dokumentation** (Oberfläche Schritt für Schritt und alle
 CLI-Kommandos mit Flags und Beispielen): **[docs/HANDBUCH.md](docs/HANDBUCH.md)**.
 Die CLI bietet neben `sync` u. a. `send` (Mail aus stdin), `queue`,
-`keygen [-import]`, `pgp-keygen`, `ctl quota|usage` und `fido2 enroll`.
+`keygen [-import]`, `pgp-keygen`, `ctl quota|usage`, `fido2 enroll` und
+`pgp-card status|reset`.
 
 ```sh
 uucpmail-client            # GUI (Erststart: Schlüssel erzeugen, Pubkey an
@@ -137,22 +138,33 @@ keine GnuPG-Installation nötig, identisch auf allen Plattformen):
 - **Schlüssel**: Einstellungen → PGP. Eigenes Schlüsselpaar interaktiv
   erzeugen (Ed25519/X25519, v4 – kompatibel mit GnuPG ≥ 2.1), vorhandenen
   privaten Schlüssel importieren, eigenen Public Key exportieren (Copy/
-  Datei), fremde Public Keys importieren/löschen. Ablage als Armor-Dateien
+  Datei), Widerrufszertifikat erzeugen. Fremde Public Keys verwaltet das
+  Web-of-Trust-Fenster (siehe unten). Ablage als Armor-Dateien
   `pubring.asc`/`secring.asc` im Konfigurationsverzeichnis (0600).
 - **Senden**: Toggle-Buttons „Signieren" und „Verschlüsseln" im Compose-
   Fenster (einzeln oder kombiniert). Format: PGP/MIME (RFC 3156);
   signiert+verschlüsselt als kombinierte One-Pass-Message. Verschlüsseln
   braucht Public Keys ALLER Empfänger; die eigene Kopie wird immer
   mitverschlüsselt (Gesendet bleibt lesbar). CLI: `send -sign -encrypt
-  [-pgp-pass …]`, `pgp-keygen -name -email [-pass]`.
+  [-pgp-pass …]`, `pgp-keygen -name -email -pass`.
 - **Empfangen**: multipart/encrypted, multipart/signed, Inline-PGP und
   Clearsign. Beim Öffnen verschlüsselter Mails fragt der Client (Ja/Nein),
   dann Passphrase; der entsperrte Schlüssel bleibt für die konfigurierte
   Dauer (Default 15 min) im Speicher – weitere verschlüsselte Mails öffnen
   sich solange ohne Nachfrage. Entschlüsseltes wird nie auf die Platte
   geschrieben. Signaturstatus in der Ansicht: ✓ gültig / ✗ ungültig /
-  ? Schlüssel unbekannt. Kein Trust-/WoT-Modell in V1 – Schlüssel werden
-  manuell per Fingerprint verifiziert.
+  ? Schlüssel unbekannt.
+- **Web of Trust** (Spinnennetz in der Werkzeugleiste): Schlüssel
+  importieren (Datei, Text, Keyserver), nach persönlicher Fingerprint-
+  Prüfung zertifizieren und caff-artig zurücksenden (je Identität eine
+  verschlüsselte Mail), Zertifizierungen, Schlüsseldetails und Ablauf
+  ansehen, Fingerprint-Streifen als PDF. Keine Vertrauensberechnung – du
+  entscheidest anhand der Zertifizierungen.
+- **OpenPGP-Smartcard** (GnuPG-/ZeitControl-Karte, YubiKey über PC/SC):
+  Wizard bringt die Unterschlüssel auf die Karte (Hauptschlüssel bleibt im
+  Schlüsselbund, Pflicht-Backup); Signieren und Entschlüsseln fragen dann
+  die Karten-PIN. Kartendetails, PIN entsperren, Werksreset; CLI
+  `pgp-card status|reset`.
 
 Interop ist end-to-end gegen GnuPG 2.5 verifiziert: vom Client signierte+
 verschlüsselte Mails entschlüsselt `gpg` mit „Korrekte Signatur"; von

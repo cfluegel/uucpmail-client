@@ -10,8 +10,9 @@ permissions:
   contents: write # für das automatische Release bei v*-Tags
 
 env:
-  # Fyne braucht unter Linux GL-, X11- UND Wayland-Header (Fyne ≥ 2.8).
-  LINUX_DEPS: libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+  # Fyne braucht unter Linux GL-, X11- UND Wayland-Header (Fyne ≥ 2.8);
+  # libpcsclite-dev für den OpenPGP-Smartcard-Zugriff (pkg/pgpcard).
+  LINUX_DEPS: libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev libpcsclite-dev
 
 jobs:
   test:

@@ -31,10 +31,13 @@ func (u *UI) buildMainWindow() {
 	u.folderList = newFolderPanel(u)
 	u.statusBar = newStatusPanel()
 
+	u.wotAction = widget.NewToolbarAction(wotIcon, func() { u.showWoTWindow() })
+	u.updateWoTAction()
 	toolbar := widget.NewToolbar(
 		widget.NewToolbarAction(theme.DocumentCreateIcon(), func() { u.showCompose() }),
 		widget.NewToolbarAction(theme.ViewRefreshIcon(), func() { u.runSync() }),
 		widget.NewToolbarAction(theme.AccountIcon(), func() { u.showContactsWindow() }),
+		u.wotAction,
 		widget.NewToolbarSeparator(),
 		widget.NewToolbarAction(theme.ListIcon(), func() { u.showLogWindow() }),
 		widget.NewToolbarAction(theme.SettingsIcon(), func() { u.showSettings(false) }),
@@ -671,13 +674,35 @@ func isPublicKeyAttachment(att mailmime.Part) bool {
 // Schlüsselbund und bietet an, den Absender ins Adressbuch zu übernehmen.
 func (p *viewPanel) importKeyAttachment(att mailmime.Part) {
 	u := p.u
-	infos, err := u.keyring.ImportPublic(att.Data)
+	rep, err := u.keyring.ImportPublicReport(att.Data)
 	if err != nil {
 		if errors.Is(err, pgp.ErrNoNewKeys) {
-			dialog.ShowInformation(i18n.T("pgp.import.attach"), i18n.T("pgp.import.exists"), u.win)
+			msg := i18n.T("pgp.import.exists")
+			if rep.OnlyOwn {
+				msg = i18n.T("pgp.import.ownnochange")
+			}
+			dialog.ShowInformation(i18n.T("pgp.import.attach"), msg, u.win)
 		} else {
 			u.showError(err)
 		}
+		return
+	}
+	if rep.Merged > 0 {
+		// Zurückgesandte Zertifizierung(en) auf bekanntem (z. B. eigenem)
+		// Schlüssel übernommen – Web-of-Trust-Rückweg.
+		text := fmt.Sprintf(i18n.T("wot.import.merged"), rep.Merged)
+		u.log.append(text)
+		if rep.MergedOwn {
+			text += "\n\n" + i18n.T("wot.import.ownhint")
+		}
+		msg := widget.NewLabel(text)
+		msg.Wrapping = fyne.TextWrapWord
+		d := dialog.NewCustom(i18n.T("pgp.import.attach"), i18n.T("contacts.close"), msg, u.win)
+		d.Resize(fyne.NewSize(480, 200))
+		d.Show()
+	}
+	infos := rep.Keys
+	if len(infos) == 0 {
 		return
 	}
 	u.log.append(fmt.Sprintf(i18n.T("pgp.import.done"), len(infos)))
@@ -809,6 +834,15 @@ func (p *viewPanel) decryptWithPrompt() {
 		p.u.showError(fmt.Errorf("%s", i18n.T("pgp.err.nopriv.decrypt")))
 		return
 	}
+	// Kartengestützter Schlüssel: statt Passphrase entschlüsselt die Karte
+	// (PIN fragt der Karten-Prompter ab) – asynchron, weil der PIN-Dialog
+	// den UI-Thread nicht blockieren darf.
+	for _, cand := range candidates {
+		if bound := p.u.cardBoundEntityFor(cand.Fingerprint); bound != nil {
+			p.decryptWithCardAsync(bound)
+			return
+		}
+	}
 	info := candidates[0]
 	ent := p.u.keyring.FindPrivateByFingerprint(info.Fingerprint)
 	p.u.promptPassphrase(p.u.win, ent, info, "", func(unlocked *pgp.Entity, ok bool) {
@@ -817,6 +851,38 @@ func (p *viewPanel) decryptWithPrompt() {
 		}
 		p.decryptWith(pgp.EntityList{unlocked}, true)
 	})
+}
+
+// decryptWithCardAsync entschlüsselt über die Karte in einer Goroutine und
+// übernimmt das Ergebnis nur, wenn noch dieselbe Mail angezeigt wird.
+func (p *viewPanel) decryptWithCardAsync(bound *pgp.Entity) {
+	if p.pmOuter == nil || !p.pmOuter.Encrypted || p.current == nil {
+		return
+	}
+	payload := p.pmOuter.EncryptedPayload
+	msgID := p.current.ID
+	pubs := p.u.keyring.PublicEntities()
+	go func() {
+		plain, sig, err := pgp.Decrypt(payload, pgp.EntityList{bound}, pubs)
+		fyne.Do(func() {
+			if p.current == nil || p.current.ID != msgID {
+				return // Nutzer hat inzwischen eine andere Mail geöffnet
+			}
+			if err != nil {
+				p.u.showError(fmt.Errorf("%s: %v", i18n.T("pgp.err.corrupt"), err))
+				return
+			}
+			inner, err := mailmime.Parse(append([]byte("From: pgp@local\r\n"), plain...))
+			if err != nil {
+				p.u.showError(fmt.Errorf("%s: %v", i18n.T("pgp.err.corrupt"), err))
+				return
+			}
+			p.decrypted = inner
+			p.decFor = msgID
+			p.decSig = sig
+			p.renderCurrent()
+		})
+	}()
 }
 
 // decryptWith führt die Entschlüsselung aus und rendert bei Erfolg neu.

@@ -79,6 +79,12 @@ func (u *UI) showComposeDraft(m *store.Meta) {
 func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	win := u.app.NewWindow(i18n.T("compose.title"))
 	win.Resize(fyne.NewSize(720, 620))
+	// Dieses Fenster ist jetzt das vorderste – Dialoge (z.B. Karten-PIN beim
+	// Senden) sollen hier erscheinen, nicht hinter dem Hauptfenster.
+	// Zurückgesetzt wird im (einzigen) OnClosed-Handler unten – ein zweiter
+	// SetOnClosed würde diesen überschreiben, und Dialoge (Karten-PIN beim
+	// Entschlüsseln!) landeten unsichtbar im geschlossenen Fenster.
+	u.activeWin = win
 
 	fromSelect := widget.NewSelect(u.cfg.Identities, nil)
 	if def, err := u.cfg.Identity(""); err == nil {
@@ -301,7 +307,10 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 			}
 		}
 	}()
-	win.SetOnClosed(func() { close(stopAutosave) })
+	win.SetOnClosed(func() {
+		close(stopAutosave)
+		u.composeClosed(win)
+	})
 
 	// Markdown-Toolbar: Snippets als Text an der Cursorposition einfügen.
 	// Die PGP-Toggles sitzen abgesetzt (vertikaler Strich) am Zeilenende –
@@ -344,6 +353,7 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 	}
 
 	doEnqueue := func() {
+		// buildMessage/ownKeyAttachment lesen Widgets → im UI-Thread.
 		msg := buildMessage()
 		if attachKeyOn {
 			att, err := ownKeyAttachment()
@@ -353,17 +363,34 @@ func (u *UI) showComposeWindow(draft *store.Meta, pf *prefill) {
 			}
 			msg.Attachments = append(msg.Attachments, *att)
 		}
-		if _, err := u.engine.Enqueue(msg); err != nil {
-			u.showError(err)
-			return
-		}
-		if draftID != "" {
-			if err := u.store.Delete(store.Drafts, draftID); err != nil {
-				u.showError(err)
-			}
-		}
-		u.refresh()
-		win.Close()
+		// Enqueue sealt die Nachricht (signieren/verschlüsseln). Bei einem
+		// kartengestützten Schlüssel löst das Signieren den PIN-Dialog per
+		// fyne.Do aus – das darf NICHT im UI-Thread laufen, sonst wartet der
+		// UI-Thread auf sich selbst (Deadlock, Fenster friert ein). Daher im
+		// Hintergrund sealen, UI-Updates zurück über fyne.Do.
+		go func() {
+			_, err := u.engine.Enqueue(msg)
+			fyne.Do(func() {
+				if err != nil {
+					// go-crypto verschluckt im RSA-Signierpfad den Fehler des
+					// Karten-Signers und meldet kryptisch „before Serialize".
+					// Bei aktivem Karten-Schlüssel in eine klare Meldung übersetzen.
+					if u.pgpCardKey != nil && strings.Contains(err.Error(), "before Serialize") {
+						err = fmt.Errorf("%s", i18n.T("pgpcard.signfail"))
+					}
+					// Fehlerdialog auf dem Compose-Fenster, nicht dahinter.
+					dialog.ShowError(err, win)
+					return
+				}
+				if draftID != "" {
+					if err := u.store.Delete(store.Drafts, draftID); err != nil {
+						u.showError(err)
+					}
+				}
+				u.refresh()
+				win.Close()
+			})
+		}()
 	}
 	sendBtn := widget.NewButton(i18n.T("compose.send"), func() {
 		// PGP-Vorprüfungen: Empfänger-Keys und entsperrter eigener Schlüssel.
@@ -552,4 +579,14 @@ func displayAddress(a *mail.Address) string {
 // (RFC 2047 dekodiert); bei Parse-Fehlern bleibt der Header unverändert.
 func decodeAddressList(header string) string {
 	return strings.Join(splitRecipients(header), ", ")
+}
+
+// composeClosed gibt die Dialog-Zuständigkeit eines geschlossenen
+// Compose-Fensters ab: Dialoge erscheinen danach im Hauptfenster (nie in
+// einem geschlossenen Fenster, auch wenn mehrere Compose-Fenster offen
+// waren und in anderer Reihenfolge geschlossen werden).
+func (u *UI) composeClosed(win fyne.Window) {
+	if u.activeWin == win {
+		u.activeWin = nil
+	}
 }

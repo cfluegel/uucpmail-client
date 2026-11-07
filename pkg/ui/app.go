@@ -10,11 +10,13 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/cfluegel/uucpmail-client/pkg/config"
 	"github.com/cfluegel/uucpmail-client/pkg/contacts"
 	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/pgp"
+	"github.com/cfluegel/uucpmail-client/pkg/pgpcard"
 	"github.com/cfluegel/uucpmail-client/pkg/store"
 	syncengine "github.com/cfluegel/uucpmail-client/pkg/sync"
 	"github.com/cfluegel/uucpmail-client/pkg/uucp"
@@ -33,6 +35,7 @@ type UI struct {
 	messageList   *messagePanel
 	messageView   *viewPanel
 	statusBar     *statusPanel
+	wotAction     *widget.ToolbarAction // Web-of-Trust-Knopf, nur mit eigenem Schlüssel aktiv
 	listZone      *focusZone
 	contentZone   *focusZone
 	activeZone    zoneID
@@ -41,6 +44,9 @@ type UI struct {
 	log           sessionLog
 	keyring       *pgp.Keyring
 	pgpCache      *pgp.Cache
+	sealer        *pgp.MailSealer
+	pgpCardKey    *pgpcard.CardKey // nil = kein kartengestützter Schlüssel aktiv
+	activeWin     fyne.Window      // vorderstes Fenster (z.B. Compose) für Dialoge; nil = Hauptfenster
 	contacts      *contacts.Book
 	syncRunning   bool
 	currentFolder string
@@ -105,6 +111,12 @@ func Run() error {
 		return err
 	}
 	u.keyring = keyring
+	if vPath, err := config.PGPVerifiedPath(); err == nil {
+		if err := keyring.LoadVerified(vPath); err != nil {
+			// Beschädigte Prüfvermerke blockieren den Start nicht.
+			fmt.Fprintln(os.Stderr, "pgp verified marks not readable:", err)
+		}
+	}
 	u.pgpCache = pgp.NewCache(pgpCacheTTL(cfg.PGPCacheMin))
 	cPath, err := config.ContactsPath()
 	if err != nil {
@@ -116,13 +128,15 @@ func Run() error {
 		u.contacts, _ = contacts.Load(cPath + ".broken")
 	}
 
-	u.engine = &syncengine.Engine{Cfg: cfg, Store: st, Spool: spool,
-		PGP: &pgp.MailSealer{Keyring: keyring, Cache: u.pgpCache}}
+	u.sealer = &pgp.MailSealer{Keyring: keyring, Cache: u.pgpCache}
+	u.engine = &syncengine.Engine{Cfg: cfg, Store: st, Spool: spool, PGP: u.sealer}
 	u.applyTheme()
 	u.state = loadUIState(u.app.Preferences())
 	u.win = u.app.NewWindow(i18n.T("app.title"))
 	u.buildMainWindow()
 	u.installSignerSource()
+	u.installCardSource()
+	u.cardExpiryWarning()
 
 	if !cfg.Complete() {
 		u.showSettings(true)
@@ -140,6 +154,17 @@ func (u *UI) showError(err error) {
 func (u *UI) refresh() {
 	u.folderList.refresh()
 	u.messageList.load(u.currentFolder)
+}
+
+// dialogParent liefert das Fenster, auf dem Dialoge erscheinen sollen: das
+// aktive Fenster (z.B. das Compose-Fenster), sonst das Hauptfenster. Wichtig
+// für den Karten-PIN-Dialog beim Senden – sonst erschiene er hinter dem
+// Compose-Fenster und das Fenster wirkte eingefroren.
+func (u *UI) dialogParent() fyne.Window {
+	if u.activeWin != nil {
+		return u.activeWin
+	}
+	return u.win
 }
 
 // saveConfig persistiert die Config und meldet Fehler im Dialog.

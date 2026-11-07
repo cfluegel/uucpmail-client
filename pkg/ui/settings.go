@@ -17,6 +17,7 @@ import (
 	"github.com/cfluegel/uucpmail-client/pkg/fido2"
 	"github.com/cfluegel/uucpmail-client/pkg/i18n"
 	"github.com/cfluegel/uucpmail-client/pkg/keys"
+	"github.com/cfluegel/uucpmail-client/pkg/pgp"
 	"github.com/cfluegel/uucpmail-client/pkg/sshtransport"
 )
 
@@ -102,7 +103,10 @@ func (u *UI) showSettings(firstRun bool) {
 	// --- Tab PGP ---
 	pgpTTL := widget.NewEntry()
 	pgpTTL.SetText(strconv.Itoa(u.cfg.PGPCacheMin))
-	pgpTab := u.buildPGPTab(win, pgpTTL)
+	keyserver := widget.NewEntry()
+	keyserver.SetPlaceHolder(pgp.DefaultKeyserver)
+	keyserver.SetText(u.cfg.PGPKeyserver)
+	pgpTab := u.buildPGPTab(win, pgpTTL, keyserver)
 
 	// --- Tab Darstellung (Sprache, Farbschema, Schriftgröße) & Profil ---
 	langSelect := widget.NewSelect(
@@ -234,6 +238,13 @@ func (u *UI) showSettings(firstRun bool) {
 			u.cfg.PGPCacheMin = n
 			u.pgpCache.SetTTL(pgpCacheTTL(n))
 			u.pgpCache.Clear()
+		}
+		if ks := strings.TrimSpace(keyserver.Text); ks != u.cfg.PGPKeyserver {
+			if _, err := pgp.KeyserverURL(ks); err != nil {
+				u.showError(err)
+			} else {
+				u.cfg.PGPKeyserver = ks
+			}
 		}
 		// Eingabe in MB; das harte Serverlimit sind 10 MB.
 		if n, err := strconv.ParseInt(strings.TrimSpace(maxSize.Text), 10, 64); err == nil && n > 0 {

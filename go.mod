@@ -3,10 +3,14 @@ module github.com/cfluegel/uucpmail-client
 go 1.27.2
 
 require (
+	cunicu.li/go-iso7816 v0.8.8
+	cunicu.li/go-openpgp-card v0.3.11
 	fyne.io/fyne/v2 v2.8.2
 	github.com/ProtonMail/go-crypto v1.5.2
+	github.com/ebfe/scard v0.0.0-20241214075232-7af069cabc25
 	github.com/go-ctap/ctaphid v0.7.0
 	github.com/go-ctap/winhello v0.1.0
+	github.com/go-pdf/fpdf v0.9.0
 	github.com/ldclabs/cose v1.3.2
 	github.com/telesma-app/ctap v0.52.0
 	go.etcd.io/bbolt v1.5.0

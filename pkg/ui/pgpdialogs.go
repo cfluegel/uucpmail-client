@@ -59,6 +59,13 @@ func (u *UI) promptPassphrase(win fyne.Window, entity *pgp.Entity, info pgp.KeyI
 // ensureUnlockedSigner stellt sicher, dass der eigene Schlüssel der Identität
 // entsperrt im Cache liegt, und ruft dann done(true) auf.
 func (u *UI) ensureUnlockedSigner(win fyne.Window, identity string, done func(ok bool)) {
+	// Kartengestützter Schlüssel: keine Passphrase nötig – die PIN fragt der
+	// Karten-Prompter beim Sealing (Sende-Goroutine) ab. Nur eine reine
+	// Fingerprint-Prüfung, kein Kartenzugriff im UI-Thread.
+	if u.isCardIdentity(identity) {
+		done(true)
+		return
+	}
 	own := u.keyring.FindPrivateByEmail(identity)
 	if own == nil {
 		u.showError(fmt.Errorf(i18n.T("pgp.err.noprivkey"), identity))
